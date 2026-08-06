@@ -1,5 +1,4 @@
-// Command imgdl mirrors Scryfall card images and MTGJSON sealed product
-// images into a bucket, tracked by a manifest and per-image state file.
+// Command imgdl mirrors Scryfall and MTGJSON sealed images into a bucket.
 package main
 
 import (
