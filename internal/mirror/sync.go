@@ -13,7 +13,10 @@ type Opts struct {
 	Base   string
 	Want   map[string]Image
 	DryRun bool
-	Log    *log.Logger
+	// SkipSealed excludes sealed keys from this run's fetch list, without
+	// dropping them from Want; bundle membership is unaffected.
+	SkipSealed bool
+	Log        *log.Logger
 }
 
 // Result reports one pass's work.
@@ -42,6 +45,9 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 	}
 
 	fetches := NeedFetch(state, opts.Want)
+	if opts.SkipSealed {
+		fetches = dropSealed(fetches)
+	}
 	res.Pending = len(fetches)
 	logger.Printf("%d images to fetch, %d wanted", len(fetches), len(opts.Want))
 	if opts.DryRun {
@@ -68,4 +74,15 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 		return res, fetchErr
 	}
 	return res, bundleErr
+}
+
+// dropSealed removes sealed keys from a NeedFetch result in place.
+func dropSealed(keys []string) []string {
+	out := keys[:0]
+	for _, k := range keys {
+		if !IsSealedKey(k) {
+			out = append(out, k)
+		}
+	}
+	return out
 }

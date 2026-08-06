@@ -66,6 +66,63 @@ func TestRunEndToEnd(t *testing.T) {
 	}
 }
 
+func TestRunSkipSealedDoesNotFetchButKeepsBundle(t *testing.T) {
+	sealedHits := 0
+	sealedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sealedHits++
+		w.Write([]byte("sealed-bytes"))
+	}))
+	defer sealedSrv.Close()
+
+	cardSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("card-bytes"))
+	}))
+	defer cardSrv.Close()
+
+	base := filepath.ToSlash(t.TempDir())
+	bucket := &simplecloud.FileBucket{}
+	sealedOnly := map[string]Image{
+		"p-NEO-111": {Key: "p-NEO-111", URL: sealedSrv.URL + "/111.jpg", ObjectPath: "NEO/sealed/111.jpg", SetCode: "NEO"},
+	}
+
+	// prior run actually fetches the sealed image, establishing its bundle membership
+	if _, err := Run(context.Background(), Opts{Bucket: bucket, Base: base, Want: sealedOnly, Log: discardLog()}); err != nil {
+		t.Fatal(err)
+	}
+	if sealedHits != 1 {
+		t.Fatalf("setup: sealedHits = %d, want 1", sealedHits)
+	}
+
+	// this run adds a new single and passes SkipSealed with the sealed key still wanted
+	want := map[string]Image{
+		"card-a":    {Key: "card-a", URL: cardSrv.URL + "/a.jpg", ObjectPath: "a/card-a.jpg", SetCode: "NEO"},
+		"p-NEO-111": sealedOnly["p-NEO-111"],
+	}
+	res, err := Run(context.Background(), Opts{Bucket: bucket, Base: base, Want: want, SkipSealed: true, Log: discardLog()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sealedHits != 1 {
+		t.Errorf("skip-sealed still fetched the TCGplayer URL, sealedHits = %d", sealedHits)
+	}
+	if res.Fetched != 1 {
+		t.Errorf("res.Fetched = %d, want 1 (card-a only)", res.Fetched)
+	}
+
+	finalState, err := LoadState(context.Background(), bucket, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := LoadManifest(context.Background(), bucket, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDigests := map[string]string{"card-a": finalState["card-a"].Digest, "p-NEO-111": finalState["p-NEO-111"].Digest}
+	if manifest["NEO"].Hash != BundleHash(wantDigests) {
+		t.Errorf("manifest NEO = %+v, sealed entry missing from bundle digests", manifest["NEO"])
+	}
+}
+
 func TestRunDryRunPlansWithoutWriting(t *testing.T) {
 	base := filepath.ToSlash(t.TempDir())
 	bucket := &simplecloud.FileBucket{}

@@ -52,17 +52,12 @@ func run(ctx context.Context, bucketFlag, setsFlag string, dryRun, skipSealed bo
 	if err != nil {
 		return err
 	}
-	if skipSealed {
-		for i := range sets {
-			sets[i].Sealed = nil
-		}
-	}
 
 	want, missing, invalidSealed := mirror.BuildWant(sets, scryURL, parseSets(setsFlag))
 	log.Printf("%d scryfall IDs referenced by mtgjson had no bulk-data match", len(missing))
 	log.Printf("%d sealed refs had an invalid set code or tcgplayer id", invalidSealed)
 
-	opts := mirror.Opts{Bucket: bucket, Base: base, Want: want, DryRun: dryRun, Log: log.Default()}
+	opts := mirror.Opts{Bucket: bucket, Base: base, Want: want, DryRun: dryRun, SkipSealed: skipSealed, Log: log.Default()}
 	result, runErr := mirror.Run(ctx, opts)
 	fmt.Printf("pending=%d fetched=%d fetchFailed=%d bundlesRebuilt=%d\n",
 		result.Pending, result.Fetched, result.FetchFailed, result.BundlesRebuilt)
