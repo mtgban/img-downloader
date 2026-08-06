@@ -14,7 +14,8 @@ import (
 
 const (
 	bulkDataURL = "https://api.scryfall.com/bulk-data"
-	userAgent   = "mtgban-img-downloader/1.0 (+https://www.mtgban.com)"
+	// UserAgent identifies the tool on every scryfall and image-source request.
+	UserAgent = "mtgban-img-downloader/1.0 (+https://www.mtgban.com)"
 )
 
 // Client calls the Scryfall API.
@@ -37,7 +38,7 @@ func (c Client) DefaultCardsURI(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "*/*")
 
 	client := c.HTTP
