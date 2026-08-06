@@ -1,5 +1,4 @@
-// Package mirror holds the pure logic of the bulk image mirror: manifest
-// and state types, bundle hashing, and bucket object path helpers.
+// Package mirror holds the mirror's manifest/state types, hashing, and object path helpers.
 package mirror
 
 import (
@@ -51,8 +50,7 @@ func BundleHash(digests map[string]string) string {
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 
-// JoinPath appends elements to a bucket base path, preserving the scheme
-// and host of remote bases. One letter schemes are Windows drive paths.
+// JoinPath appends elems to base, preserving scheme/host (one-letter schemes are Windows drives).
 func JoinPath(base string, elems ...string) string {
 	u, err := url.Parse(base)
 	if err != nil || u.Scheme == "" || len(u.Scheme) == 1 {
@@ -62,8 +60,7 @@ func JoinPath(base string, elems ...string) string {
 	return u.String()
 }
 
-// SingleObjectPath returns the bucket object path for a Scryfall image URL:
-// the URL path with the leading slash stripped.
+// SingleObjectPath is the Scryfall image URL path with the leading slash stripped.
 func SingleObjectPath(sourceURL string) (string, error) {
 	u, err := url.Parse(sourceURL)
 	if err != nil {
