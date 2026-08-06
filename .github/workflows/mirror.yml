@@ -28,8 +28,10 @@ jobs:
         env:
           B2_ACCESS_KEY: ${{ secrets.B2_ACCESS_KEY }}
           B2_ACCESS_SECRET: ${{ secrets.B2_ACCESS_SECRET }}
+          SETS: ${{ inputs.sets }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           FLAGS=""
-          if [ -n "${{ inputs.sets }}" ]; then FLAGS="$FLAGS -sets ${{ inputs.sets }}"; fi
-          if [ "${{ inputs.dry_run }}" = "true" ]; then FLAGS="$FLAGS -dry-run"; fi
+          if [ -n "$SETS" ]; then FLAGS="$FLAGS -sets $SETS"; fi
+          if [ "$DRY_RUN" = "true" ]; then FLAGS="$FLAGS -dry-run"; fi
           go run ./cmd/imgdl -bucket "b2://mtgban-images/magic" $FLAGS
