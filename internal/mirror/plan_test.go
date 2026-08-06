@@ -94,7 +94,7 @@ func buildWantScryURL() map[string]string {
 }
 
 func TestBuildWantSingles(t *testing.T) {
-	want, missing := BuildWant(buildWantFixture(), buildWantScryURL(), nil)
+	want, missing, _ := BuildWant(buildWantFixture(), buildWantScryURL(), nil)
 
 	gotA := want["id-a"]
 	wantA := Image{
@@ -118,7 +118,7 @@ func TestBuildWantSingles(t *testing.T) {
 }
 
 func TestBuildWantSealed(t *testing.T) {
-	want, _ := BuildWant(buildWantFixture(), buildWantScryURL(), nil)
+	want, _, _ := BuildWant(buildWantFixture(), buildWantScryURL(), nil)
 
 	got, ok := want["p-NEO-111"]
 	if !ok {
@@ -135,9 +135,38 @@ func TestBuildWantSealed(t *testing.T) {
 	}
 }
 
+func TestBuildWantSkipsInvalidSealed(t *testing.T) {
+	sets := []mtgjson.SetImages{
+		{
+			Code:        "NEO",
+			ScryfallIDs: []string{"id-a"},
+			Sealed: []mtgjson.SealedRef{
+				{TcgplayerProductID: "111"},
+				{TcgplayerProductID: "abc"},
+				{TcgplayerProductID: ""},
+			},
+		},
+	}
+	scryURL := map[string]string{
+		"id-a": "https://cards.scryfall.io/normal/front/a/id-a.jpg?1600000000",
+	}
+
+	want, _, invalidSealed := BuildWant(sets, scryURL, nil)
+
+	if _, ok := want["p-NEO-111"]; !ok {
+		t.Error("want missing valid sealed entry p-NEO-111")
+	}
+	if _, ok := want["p-NEO-abc"]; ok {
+		t.Error("want should not include non-numeric tcgId p-NEO-abc")
+	}
+	if invalidSealed != 2 {
+		t.Errorf("invalidSealed = %d, want 2", invalidSealed)
+	}
+}
+
 func TestBuildWantFilter(t *testing.T) {
 	filter := map[string]bool{"NEO": true}
-	want, missing := BuildWant(buildWantFixture(), buildWantScryURL(), filter)
+	want, missing, _ := BuildWant(buildWantFixture(), buildWantScryURL(), filter)
 
 	if _, ok := want["id-c"]; ok {
 		t.Errorf("filtered MID set should not contribute id-c")
@@ -156,7 +185,7 @@ func TestBuildWantURLChangeTriggersNeedFetch(t *testing.T) {
 		"id-a": {Digest: "d1", Source: "https://cards.scryfall.io/normal/front/a/id-a.jpg?1500000000"},
 	}
 	scryURL := buildWantScryURL()
-	want, _ := BuildWant(buildWantFixture(), scryURL, map[string]bool{"NEO": true})
+	want, _, _ := BuildWant(buildWantFixture(), scryURL, map[string]bool{"NEO": true})
 
 	got := NeedFetch(state, want)
 	found := false

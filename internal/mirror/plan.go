@@ -3,6 +3,7 @@ package mirror
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 
 	"github.com/the-muppet2/img-downloader/internal/mtgjson"
@@ -16,10 +17,13 @@ type Image struct {
 	SetCode    string
 }
 
+// sealedKeyPattern mirrors the website's offlineapi sealed key regex.
+var sealedKeyPattern = regexp.MustCompile(`^p-[0-9A-Z]{2,6}-[0-9]+$`)
+
 // BuildWant assembles the wanted image map from mtgjson sets and scryfall URLs.
-func BuildWant(sets []mtgjson.SetImages, scryURL map[string]string, setsFilter map[string]bool) (map[string]Image, []string) {
-	want := map[string]Image{}
-	var missing []string
+// invalidSealed counts sealed refs with a malformed set code or tcgplayer id.
+func BuildWant(sets []mtgjson.SetImages, scryURL map[string]string, setsFilter map[string]bool) (want map[string]Image, missing []string, invalidSealed int) {
+	want = map[string]Image{}
 	for _, s := range sets {
 		if setsFilter != nil && !setsFilter[s.Code] {
 			continue
@@ -39,6 +43,10 @@ func BuildWant(sets []mtgjson.SetImages, scryURL map[string]string, setsFilter m
 		}
 		for _, sealed := range s.Sealed {
 			key := SealedKey(s.Code, sealed.TcgplayerProductID)
+			if !sealedKeyPattern.MatchString(key) {
+				invalidSealed++
+				continue
+			}
 			want[key] = Image{
 				Key:        key,
 				URL:        fmt.Sprintf("https://product-images.tcgplayer.com/%s.jpg", sealed.TcgplayerProductID),
@@ -48,7 +56,7 @@ func BuildWant(sets []mtgjson.SetImages, scryURL map[string]string, setsFilter m
 		}
 	}
 	sort.Strings(missing)
-	return want, missing
+	return want, missing, invalidSealed
 }
 
 // NeedFetch returns the keys missing from state or whose source URL changed, sorted.

@@ -2,7 +2,6 @@
 package mirror
 
 import (
-	"errors"
 	"fmt"
 	"hash/fnv"
 	"net/url"
@@ -61,14 +60,15 @@ func JoinPath(base string, elems ...string) string {
 }
 
 // SingleObjectPath is the Scryfall image URL path with the leading slash stripped.
+// Rejects paths that are empty, absolute, or escape the bucket root.
 func SingleObjectPath(sourceURL string) (string, error) {
 	u, err := url.Parse(sourceURL)
 	if err != nil {
 		return "", err
 	}
 	p := strings.TrimPrefix(u.Path, "/")
-	if p == "" {
-		return "", errors.New("mirror: empty path in source URL")
+	if p == "" || path.IsAbs(p) || p == ".." || strings.HasPrefix(p, "../") || path.Clean(p) != p {
+		return "", fmt.Errorf("mirror: unsafe object path %q from source URL", p)
 	}
 	return p, nil
 }
@@ -81,4 +81,9 @@ func SealedObjectPath(setCode, tcgID string) string {
 // SealedKey returns the manifest/state image key for a sealed product.
 func SealedKey(setCode, tcgID string) string {
 	return fmt.Sprintf("p-%s-%s", setCode, tcgID)
+}
+
+// IsSealedKey reports whether key is a sealed product image key (p-<SETCODE>-<tcgId>).
+func IsSealedKey(key string) bool {
+	return strings.HasPrefix(key, "p-")
 }

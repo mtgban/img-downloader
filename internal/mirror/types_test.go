@@ -55,6 +55,20 @@ func TestSingleObjectPath(t *testing.T) {
 	}
 }
 
+func TestSingleObjectPathRejectsTraversal(t *testing.T) {
+	urls := []string{
+		"https://host/../magic/images-manifest.json",
+		"https://host/normal/../../magic/mirror-state.json",
+		"https://host//etc/passwd",
+		"https://host/..",
+	}
+	for _, u := range urls {
+		if got, err := mirror.SingleObjectPath(u); err == nil {
+			t.Errorf("SingleObjectPath(%q) = %q, nil, want error", u, got)
+		}
+	}
+}
+
 func TestSealedKeyAndPath(t *testing.T) {
 	if k := mirror.SealedKey("MH3", "541185"); k != "p-MH3-541185" {
 		t.Fatalf("key %q", k)
