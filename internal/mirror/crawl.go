@@ -78,6 +78,10 @@ func (f *fetcher) run(ctx context.Context, want map[string]Image, keys []string)
 		go func(host string, queue []string) {
 			defer wg.Done()
 			for _, key := range queue {
+				// stop taking new work once the run is cancelled
+				if ctx.Err() != nil {
+					return
+				}
 				if err := f.fetchOne(ctx, host, want[key]); err != nil {
 					f.log.Printf("%s: %v", key, err)
 					f.mu.Lock()
@@ -165,7 +169,9 @@ func (f *fetcher) download(ctx context.Context, host, srcURL string) ([]byte, er
 			if attempt >= fetchRetries {
 				return nil, err
 			}
-			time.Sleep(f.backoff(attempt))
+			if err := sleepCtx(ctx, f.backoff(attempt)); err != nil {
+				return nil, err
+			}
 			continue
 		}
 
@@ -191,11 +197,25 @@ func (f *fetcher) download(ctx context.Context, host, srcURL string) ([]byte, er
 					}
 				}
 			}
-			time.Sleep(delay)
+			if err := sleepCtx(ctx, delay); err != nil {
+				return nil, err
+			}
 		default:
 			resp.Body.Close()
 			return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 		}
+	}
+}
+
+// sleepCtx waits out d, or returns ctx.Err() early if ctx is cancelled first.
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 
@@ -206,7 +226,12 @@ func (f *fetcher) saveSnapshot(ctx context.Context) error {
 		snapshot[k] = v
 	}
 	f.mu.Unlock()
+
+	// save survives a cancelled run so the crawl stays resumable
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+
 	f.saveMu.Lock()
 	defer f.saveMu.Unlock()
-	return SaveState(ctx, f.bucket, f.base, snapshot)
+	return SaveState(saveCtx, f.bucket, f.base, snapshot)
 }

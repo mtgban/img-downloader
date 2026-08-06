@@ -185,3 +185,54 @@ func TestFetchAllWiring(t *testing.T) {
 		t.Errorf("object not written: %v", err)
 	}
 }
+
+func TestRunStopsPromptlyOnCancelAndSavesSnapshot(t *testing.T) {
+	srvOK := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("jpegbytes"))
+	}))
+	defer srvOK.Close()
+
+	srvSlow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "120")
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srvSlow.Close()
+
+	base := filepath.ToSlash(t.TempDir())
+	f := newFetcher(&simplecloud.FileBucket{}, base, State{}, log.New(io.Discard, "", 0))
+	f.limit = &Limiter{Interval: 0}
+	// short backoff, so a real long delay only shows up via the Retry-After header
+	f.backoff = func(int) time.Duration { return 10 * time.Millisecond }
+
+	want := map[string]Image{
+		"key-a": {Key: "key-a", URL: srvOK.URL, ObjectPath: "a/key-a.jpg"},
+		"key-b": {Key: "key-b", URL: srvSlow.URL, ObjectPath: "b/key-b.jpg"},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+
+	start := time.Now()
+	done := make(chan struct{})
+	go func() {
+		f.run(ctx, want, []string{"key-a", "key-b"})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("run did not return promptly after ctx cancellation")
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Errorf("run took %v after cancellation, want well under the 120s Retry-After delay", elapsed)
+	}
+
+	got, err := LoadState(context.Background(), &simplecloud.FileBucket{}, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["key-a"]; !ok {
+		t.Error("state snapshot missing the key fetched before cancellation")
+	}
+}
