@@ -26,6 +26,7 @@ jobs:
           go-version: stable
       - name: run mirror
         env:
+          B2_BUCKET: ${{ vars.B2_BUCKET || 'b2://mtgban-images/magic' }}
           B2_ACCESS_KEY: ${{ secrets.B2_ACCESS_KEY }}
           B2_ACCESS_SECRET: ${{ secrets.B2_ACCESS_SECRET }}
           SETS: ${{ inputs.sets }}
@@ -34,4 +35,4 @@ jobs:
           FLAGS=""
           if [ -n "$SETS" ]; then FLAGS="$FLAGS -sets $SETS"; fi
           if [ "$DRY_RUN" = "true" ]; then FLAGS="$FLAGS -dry-run"; fi
-          go run ./cmd/imgdl -bucket "b2://mtgban-images/magic" $FLAGS
+          go run ./cmd/imgdl $FLAGS

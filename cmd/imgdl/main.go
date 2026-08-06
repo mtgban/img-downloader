@@ -21,24 +21,33 @@ import (
 const allPrintingsURL = "https://mtgjson.com/api/v5/AllPrintings.json.gz"
 
 func main() {
-	bucketFlag := flag.String("bucket", "", "bucket to mirror into, b2://name/prefix or a local dir (required)")
 	setsFlag := flag.String("sets", "", "CSV of set codes to mirror, empty means all sets")
 	dryRun := flag.Bool("dry-run", false, "print the fetch plan without fetching or writing")
 	skipSealed := flag.Bool("skip-sealed", false, "skip the TCGplayer sealed product pass")
 	flag.Parse()
 
-	if *bucketFlag == "" {
-		log.Fatal("-bucket is required")
+	bucketEnv, err := requireBucketEnv()
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	ctx := context.Background()
-	if err := run(ctx, *bucketFlag, *setsFlag, *dryRun, *skipSealed); err != nil {
+	if err := run(ctx, bucketEnv, *setsFlag, *dryRun, *skipSealed); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(ctx context.Context, bucketFlag, setsFlag string, dryRun, skipSealed bool) error {
-	bucket, base, err := openBucket(ctx, bucketFlag)
+// requireBucketEnv reads B2_BUCKET and errors clearly if it is unset.
+func requireBucketEnv() (string, error) {
+	bucket := os.Getenv("B2_BUCKET")
+	if bucket == "" {
+		return "", errors.New("B2_BUCKET env variable is required, e.g. b2://mtgban-images/magic or a local dir")
+	}
+	return bucket, nil
+}
+
+func run(ctx context.Context, bucketEnv, setsFlag string, dryRun, skipSealed bool) error {
+	bucket, base, err := openBucket(ctx, bucketEnv)
 	if err != nil {
 		return err
 	}

@@ -51,3 +51,22 @@ func TestOpenBucketB2RequiresCreds(t *testing.T) {
 		t.Fatal("openBucket(b2://... without creds) = nil error, want error")
 	}
 }
+
+func TestRequireBucketEnvMissing(t *testing.T) {
+	t.Setenv("B2_BUCKET", "")
+	_, err := requireBucketEnv()
+	if err == nil {
+		t.Fatal("requireBucketEnv() = nil error, want error")
+	}
+}
+
+func TestRequireBucketEnvSet(t *testing.T) {
+	t.Setenv("B2_BUCKET", "./tmp-mirror")
+	got, err := requireBucketEnv()
+	if err != nil {
+		t.Fatalf("requireBucketEnv() error = %v", err)
+	}
+	if got != "./tmp-mirror" {
+		t.Errorf("requireBucketEnv() = %q, want %q", got, "./tmp-mirror")
+	}
+}

@@ -42,20 +42,26 @@ updating both this tool and the website consumer.
 ## Usage
 
 ```
-go run ./cmd/imgdl -bucket <b2://bucket/prefix or local-dir> [-sets CSV] [-dry-run] [-skip-sealed]
+B2_BUCKET=<b2://bucket/prefix or local-dir> go run ./cmd/imgdl [-sets CSV] [-dry-run] [-skip-sealed]
+```
+
+Example local dev invocation:
+
+```
+B2_BUCKET=./tmp-mirror go run ./cmd/imgdl -sets NEO -dry-run
 ```
 
 ### Flags
 
-- `-bucket` (required): destination, either `b2://name/prefix` or a local
-  directory path.
 - `-sets`: comma-separated set codes to mirror; empty means all sets.
 - `-dry-run`: print the fetch plan without fetching or writing anything.
 - `-skip-sealed`: skip the TCGplayer sealed product pass.
 
 ### Environment variables
 
-- `B2_ACCESS_KEY`, `B2_ACCESS_SECRET`: required when `-bucket` uses the
+- `B2_BUCKET` (required): destination, either `b2://name/prefix` or a local
+  directory path.
+- `B2_ACCESS_KEY`, `B2_ACCESS_SECRET`: required when `B2_BUCKET` uses the
   `b2://` scheme. Not read from any config file, env only.
 
 ## GitHub Action
@@ -67,6 +73,10 @@ documents) and can also be triggered manually via workflow_dispatch with
 
 - `B2_ACCESS_KEY`
 - `B2_ACCESS_SECRET`
+
+`B2_BUCKET` defaults to `b2://mtgban-images/magic` but is overridden by an
+org or repo-level Actions variable of the same name if one is set; org-level
+variables and secrets are picked up automatically, no workflow edits needed.
 
 Notes on GitHub's scheduled workflows: schedules only fire from the default
 branch, and on public repos GitHub disables schedules after 60 days with no
