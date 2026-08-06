@@ -110,8 +110,7 @@ func TestFetch_Gzip(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/AllPrintings.json.gz", func(w http.ResponseWriter, r *http.Request) {
-		// no Content-Encoding header: the .gz body is opaque file content,
-		// not HTTP transport-level encoding (which the client would auto-decode)
+		// no Content-Encoding header: avoid transport auto-decode of the .gz body
 		var buf bytes.Buffer
 		gw := gzip.NewWriter(&buf)
 		gw.Write([]byte(body))

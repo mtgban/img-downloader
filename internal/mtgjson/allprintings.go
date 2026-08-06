@@ -1,5 +1,4 @@
-// Package mtgjson streams the MTGJSON AllPrintings.json set data without
-// decoding the whole (potentially ~600MB) document into memory at once.
+// Package mtgjson streams MTGJSON AllPrintings.json set data without full decode.
 package mtgjson
 
 import (
@@ -49,8 +48,7 @@ type slimSet struct {
 	SealedProduct []slimSealedProduct `json:"sealedProduct"`
 }
 
-// StreamSets token-walks an AllPrintings.json document, calling fn once per
-// set without buffering the full "data" object in memory.
+// StreamSets token-walks AllPrintings.json, calling fn once per set.
 func StreamSets(r io.Reader, fn func(s SetImages) error) error {
 	dec := json.NewDecoder(r)
 
@@ -81,8 +79,7 @@ func StreamSets(r io.Reader, fn func(s SetImages) error) error {
 	return nil
 }
 
-// advanceToDataObject walks top-level keys, skipping any that aren't "data",
-// leaving the decoder positioned just inside the "data" object.
+// advanceToDataObject leaves the decoder positioned just inside the "data" object.
 func advanceToDataObject(dec *json.Decoder) error {
 	tok, err := dec.Token()
 	if err != nil {
