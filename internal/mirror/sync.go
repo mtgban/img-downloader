@@ -70,7 +70,7 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 		logger.Printf("run stopped early, skipping bundle rebuild")
 	} else {
 		codes := BundlesToRebuild(manifest, SetDigests(state, opts.Want))
-		res.BundlesRebuilt, bundleErr = RebuildBundles(ctx, opts.Bucket, opts.Base, state, opts.Want, manifest, codes)
+		res.BundlesRebuilt, bundleErr = RebuildBundles(ctx, opts.Bucket, opts.Base, state, opts.Want, manifest, codes, logger)
 	}
 
 	// manifest and state persist even when the run was interrupted or work failed

@@ -1,6 +1,7 @@
 package mirror
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -431,5 +432,34 @@ func TestTripTakesBackMarkersFromItsStreak(t *testing.T) {
 	}
 	if len(NeedFetch(f.state, want)) != len(want) {
 		t.Error("every key must remain queued after an aborted run")
+	}
+}
+
+func TestFetchAllLogsProgressPeriodically(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("jpegbytes"))
+	}))
+	defer srv.Close()
+
+	var buf bytes.Buffer
+	f := testFetcher(t)
+	f.log = log.New(&buf, "", 0)
+	f.progressEvery = 10
+
+	keys := make([]string, 0, 25)
+	want := map[string]Image{}
+	for i := range 25 {
+		k := fmt.Sprintf("key-%04d", i)
+		keys = append(keys, k)
+		want[k] = Image{Key: k, URL: srv.URL + "/" + k, ObjectPath: k + ".jpg"}
+	}
+	if _, _, err := f.run(context.Background(), want, keys); err != nil {
+		t.Fatal(err)
+	}
+
+	// one line at 10 and one at 20, the 25th run out before the next multiple
+	got := strings.Count(buf.String(), "fetched 10/25 (40%)") + strings.Count(buf.String(), "fetched 20/25 (80%)")
+	if got != 2 {
+		t.Errorf("progress lines = %d, want 2, in:\n%s", got, buf.String())
 	}
 }

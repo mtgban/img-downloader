@@ -4,18 +4,26 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 
 	"github.com/mtgban/simplecloud"
 )
 
+// A first run rebuilds every set, reading each one's images back out of the
+// bucket, which is tens of minutes of otherwise silent work.
+const bundleProgressEvery = 50
+
 // RebuildBundles rebuilds each set's zip; failures are per set, caller saves manifest.
-func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base string, state State, want map[string]Image, manifest Manifest, codes []string) (int, error) {
+func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base string, state State, want map[string]Image, manifest Manifest, codes []string, logger *log.Logger) (int, error) {
 	setDigests := SetDigests(state, want)
+	if logger == nil {
+		logger = log.Default()
+	}
 
 	rebuilt := 0
 	var failed []string
-	for _, code := range codes {
+	for i, code := range codes {
 		info, err := rebuildOne(ctx, bucket, base, want, code, setDigests[code])
 		if err != nil {
 			failed = append(failed, code)
@@ -23,6 +31,9 @@ func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base str
 		}
 		manifest[code] = info
 		rebuilt++
+		if (i+1)%bundleProgressEvery == 0 {
+			logger.Printf("rebuilt %d/%d bundles", i+1, len(codes))
+		}
 	}
 	if len(failed) > 0 {
 		return rebuilt, fmt.Errorf("bundle rebuild failed for %d of %d sets: %s", len(failed), len(codes), strings.Join(failed, ", "))

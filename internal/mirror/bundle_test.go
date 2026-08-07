@@ -25,7 +25,7 @@ func TestRebuildBundlesOnlyRebuildsChangedSet(t *testing.T) {
 	// NEO already matches its digest, so it is not passed as a code to rebuild.
 	manifest := Manifest{"NEO": {Hash: BundleHash(map[string]string{"card-a": "d1"}), Count: 1, Bytes: 99}}
 
-	rebuilt, err := RebuildBundles(context.Background(), &simplecloud.FileBucket{}, base, state, want, manifest, []string{"MID"})
+	rebuilt, err := RebuildBundles(context.Background(), &simplecloud.FileBucket{}, base, state, want, manifest, []string{"MID"}, discardLog())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestRebuildBundlesIsolatesSetFailures(t *testing.T) {
 	}
 	manifest := Manifest{}
 
-	_, err := RebuildBundles(context.Background(), &simplecloud.FileBucket{}, base, state, want, manifest, []string{"NEO", "MID"})
+	_, err := RebuildBundles(context.Background(), &simplecloud.FileBucket{}, base, state, want, manifest, []string{"NEO", "MID"}, discardLog())
 	if err == nil {
 		t.Fatal("expected aggregate error for the failed set")
 	}

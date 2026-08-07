@@ -120,6 +120,17 @@ every 20 seconds at the above rate — so an interrupted run resumes from
 where it left off instead of restarting; rerun the same command and it only
 fetches what is still missing.
 
+Progress is reported every 2000 images, roughly every few minutes, and every
+50 bundles during the rebuild:
+
+```
+fetched 24000/119797 (20%), 412 not published at source
+rebuilt 250/1043 bundles
+```
+
+Both phases otherwise log only errors, which over a run this long makes a
+healthy mirror indistinguishable from a hung one.
+
 Two costs are specific to the first run. Every set's bundle is rebuilt
 because the manifest starts empty, and a rebuild reads its members back out
 of the bucket, so the run pulls all ~119k images down again (~30 GB of B2
