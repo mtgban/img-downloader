@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"sync"
 
 	"github.com/mtgban/simplecloud"
 )
@@ -17,36 +18,85 @@ import (
 // timeout it would repeat that work forever without ever converging.
 const bundleSaveEvery = 20
 
+// Worker count is bounded by memory, not CPU: a large set holds its raw images plus its zip in memory at once.
+const bundleWorkers = 8
+
 // RebuildBundles rebuilds each set's zip, snapshotting the manifest as it goes
-// so a killed run resumes rather than restarting. Failures are per set.
+// so a killed run resumes rather than restarting. Failures are per set. Sets
+// are rebuilt on a bounded worker pool; the snapshot/progress cadence and
+// cancellation/failure handling apply to completions, so their order does not
+// depend on which worker finishes which set first.
 func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base string, state State, want map[string]Image, manifest Manifest, codes []string, logger *log.Logger) (int, error) {
 	setDigests := SetDigests(state, want)
 	if logger == nil {
 		logger = log.Default()
 	}
 
+	var mu sync.Mutex
+	var saveMu sync.Mutex
 	rebuilt := 0
+	completed := 0
 	var failed []string
-	for i, code := range codes {
-		// bail immediately rather than walking the remainder failing every
-		// read, which would outlast the grace period before the final save
-		if ctx.Err() != nil {
-			logger.Printf("interrupted after %d of %d bundles", i, len(codes))
-			return rebuilt, ctx.Err()
-		}
-		info, err := rebuildOne(ctx, bucket, base, want, code, setDigests[code])
-		if err != nil {
-			failed = append(failed, code)
-			continue
-		}
-		manifest[code] = info
-		rebuilt++
-		if (i+1)%bundleSaveEvery == 0 {
-			logger.Printf("rebuilt %d/%d bundles", i+1, len(codes))
-			if err := saveManifestSnapshot(ctx, bucket, base, manifest); err != nil {
-				logger.Println("manifest save failed:", err)
+
+	work := make(chan string)
+	go func() {
+		defer close(work)
+		for _, code := range codes {
+			select {
+			case work <- code:
+			case <-ctx.Done():
+				return
 			}
 		}
+	}()
+
+	var wg sync.WaitGroup
+	for range bundleWorkers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for code := range work {
+				// stop taking new work once the run is cancelled
+				if ctx.Err() != nil {
+					return
+				}
+				info, err := rebuildOne(ctx, bucket, base, want, code, setDigests[code])
+
+				mu.Lock()
+				if err != nil {
+					failed = append(failed, code)
+				} else {
+					manifest[code] = info
+					rebuilt++
+				}
+				completed++
+				n := completed
+				// copy under the lock so the save below cannot race concurrent manifest writes
+				var snapshot Manifest
+				if n%bundleSaveEvery == 0 {
+					snapshot = make(Manifest, len(manifest))
+					for k, v := range manifest {
+						snapshot[k] = v
+					}
+				}
+				mu.Unlock()
+
+				if snapshot != nil {
+					logger.Printf("rebuilt %d/%d bundles", n, len(codes))
+					saveMu.Lock()
+					if err := saveManifestSnapshot(ctx, bucket, base, snapshot); err != nil {
+						logger.Println("manifest save failed:", err)
+					}
+					saveMu.Unlock()
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	if ctx.Err() != nil {
+		logger.Printf("interrupted after %d of %d bundles", completed, len(codes))
+		return rebuilt, ctx.Err()
 	}
 	if len(failed) > 0 {
 		return rebuilt, fmt.Errorf("bundle rebuild failed for %d of %d sets: %s", len(failed), len(codes), strings.Join(failed, ", "))
