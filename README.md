@@ -131,6 +131,16 @@ every 20 seconds at the above rate — so an interrupted run resumes from
 where it left off instead of restarting; rerun the same command and it only
 fetches what is still missing.
 
+The bundle rebuild is the slower half of a first run: each set is rebuilt by
+reading its images back out of the bucket one at a time, so all ~119k reads
+land there. The 2026-08-07 run managed fewer than 50 sets in 31 minutes, the
+alphabetically-first sets being large ones, which puts the full pass in the
+region of four hours on its own. The manifest is therefore snapshotted every
+20 sets, on a context that outlives cancellation, and a cancelled rebuild
+returns immediately instead of walking the remainder failing every read.
+Without both, a run killed at its timeout lost every bundle it had built and
+the phase could never converge across runs however many you ran.
+
 Progress is reported every 30 seconds during the crawl, and every 20 bundles
 during the rebuild:
 

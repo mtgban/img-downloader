@@ -2,6 +2,8 @@ package mirror
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -71,5 +73,53 @@ func TestRebuildBundlesIsolatesSetFailures(t *testing.T) {
 	}
 	if _, ok := manifest["MID"]; ok {
 		t.Error("failed set MID must not enter the manifest")
+	}
+}
+
+func TestRebuildBundlesSnapshotsManifestAsItGoes(t *testing.T) {
+	base := filepath.ToSlash(t.TempDir())
+	bucket := &simplecloud.FileBucket{}
+
+	// one image per set so every rebuild succeeds cheaply
+	state := State{}
+	want := map[string]Image{}
+	var codes []string
+	for i := range bundleSaveEvery + 5 {
+		code := fmt.Sprintf("S%02d", i)
+		key := "card-" + code
+		codes = append(codes, code)
+		state[key] = StateEntry{Digest: "d" + code}
+		want[key] = Image{Key: key, ObjectPath: key + ".jpg", SetCode: code}
+		if err := os.WriteFile(filepath.Join(filepath.FromSlash(base), key+".jpg"), []byte("bytes"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	manifest := Manifest{}
+	if _, err := RebuildBundles(context.Background(), bucket, base, state, want, manifest, codes, discardLog()); err != nil {
+		t.Fatal(err)
+	}
+
+	// the on-disk manifest must have been written mid-loop, not only by the
+	// caller afterwards, or a killed run loses every bundle it built
+	saved, err := LoadManifest(context.Background(), bucket, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved) != bundleSaveEvery {
+		t.Errorf("snapshotted manifest has %d sets, want %d from the mid-loop save", len(saved), bundleSaveEvery)
+	}
+}
+
+func TestRebuildBundlesStopsOnCancellation(t *testing.T) {
+	base := filepath.ToSlash(t.TempDir())
+	bucket := &simplecloud.FileBucket{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	codes := []string{"NEO", "MID", "ARB"}
+	_, err := RebuildBundles(ctx, bucket, base, State{}, map[string]Image{}, Manifest{}, codes, discardLog())
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled rather than a per-set failure list", err)
 	}
 }
