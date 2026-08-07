@@ -89,8 +89,9 @@ org or repo-level Actions variable of the same name if one is set; org-level
 variables and secrets are picked up automatically, no workflow edits needed.
 
 The job's `timeout-minutes` is 350, just under the 360 minute ceiling GitHub
-enforces on hosted runners. That is sized for the initial backfill, which is
-the only run that comes close to it; see below for the arithmetic.
+enforces on hosted runners. Steady-state daily runs finish in minutes. The
+initial backfill does not fit in it at all and is expected to take two or
+three runs to converge; see below.
 
 Notes on GitHub's scheduled workflows: schedules only fire from the default
 branch, and on public repos GitHub disables schedules after 60 days with no
@@ -107,12 +108,22 @@ and are fetched in parallel, so the singles determine the wall clock.
 
 The limiter books slots 100ms apart in absolute time rather than sleeping
 100ms between requests, so a download shorter than the interval is absorbed
-by it instead of adding to it. The steady-state rate is therefore one image
-per 100ms, not 100ms plus transfer time — a mirror of NEO measured 572
-images in 57s, or 99.6ms each. That puts the full backfill at roughly three
-hours, plus about forty minutes for the first bundle build (see below), so
-around 3.5-4 hours against the workflow's 350 minute timeout. The rate only
-degrades if a download exceeds 100ms, which a ~100KB jpg does not.
+by it instead of adding to it. Locally that holds and the rate is one image
+per 100ms — NEO measured 572 images in 57s, ARB 157 in 16s. **On a GitHub
+runner it does not.** The 2026-08-07 backfill managed 62,111 images in its
+350 minute budget, a measured **338ms per image**, 3.4x slower; downloads
+there evidently exceed the interval, so the limiter stops absorbing them and
+the rate becomes the transfer time.
+
+At that rate a full backfill is about **11 hours**, comfortably past the 360
+minute ceiling GitHub enforces. It therefore cannot complete in one scheduled
+run, and is expected to take two or three, each resuming where the last was
+killed. That works — the run above was SIGKILLed at its timeout and still
+left all 62,111 images recorded — but if you want it done in one sitting, run
+it locally, where ~100ms per image puts the whole thing near three hours.
+
+Do not read a timed-out backfill as a failure. Check what a dry run reports as
+still pending before assuming anything went wrong.
 
 Run it locally or trigger the workflow manually (workflow_dispatch, leave
 `sets` empty for a full run). State saves every 200 fetched images — about
