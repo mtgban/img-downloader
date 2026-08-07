@@ -1,4 +1,4 @@
-module github.com/the-muppet2/img-downloader
+module github.com/mtgban/img-downloader
 
 go 1.26.1
 

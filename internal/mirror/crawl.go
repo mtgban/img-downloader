@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/mtgban/simplecloud"
-	"github.com/the-muppet2/img-downloader/internal/scryfall"
+	"github.com/mtgban/img-downloader/internal/scryfall"
 )
 
 const (

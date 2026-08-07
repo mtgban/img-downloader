@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/the-muppet2/img-downloader/internal/scryfall"
+	"github.com/mtgban/img-downloader/internal/scryfall"
 )
 
 // rerouteTransport rewrites every request to target the given test server,

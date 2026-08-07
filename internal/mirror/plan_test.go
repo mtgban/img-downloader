@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/the-muppet2/img-downloader/internal/mtgjson"
+	"github.com/mtgban/img-downloader/internal/mtgjson"
 )
 
 func planFixture() (State, map[string]Image) {

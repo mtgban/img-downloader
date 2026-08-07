@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/the-muppet2/img-downloader/internal/mtgjson"
+	"github.com/mtgban/img-downloader/internal/mtgjson"
 )
 
 // Image is one wanted mirror entry.

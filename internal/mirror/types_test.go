@@ -3,7 +3,7 @@ package mirror_test
 import (
 	"testing"
 
-	"github.com/the-muppet2/img-downloader/internal/mirror"
+	"github.com/mtgban/img-downloader/internal/mirror"
 )
 
 func TestBundleHashDeterministicAndOrderFree(t *testing.T) {

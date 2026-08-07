@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/the-muppet2/img-downloader/internal/mtgjson"
+	"github.com/mtgban/img-downloader/internal/mtgjson"
 )
 
 const allPrintingsSnippet = `{

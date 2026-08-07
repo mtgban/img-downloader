@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/mtgban/simplecloud"
-	"github.com/the-muppet2/img-downloader/internal/mirror"
+	"github.com/mtgban/img-downloader/internal/mirror"
 )
 
 // errBucket fails every read with a fixed non-not-found error.

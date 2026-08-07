@@ -13,9 +13,9 @@ import (
 	"strings"
 
 	"github.com/mtgban/simplecloud"
-	"github.com/the-muppet2/img-downloader/internal/mirror"
-	"github.com/the-muppet2/img-downloader/internal/mtgjson"
-	"github.com/the-muppet2/img-downloader/internal/scryfall"
+	"github.com/mtgban/img-downloader/internal/mirror"
+	"github.com/mtgban/img-downloader/internal/mtgjson"
+	"github.com/mtgban/img-downloader/internal/scryfall"
 )
 
 const allPrintingsURL = "https://mtgjson.com/api/v5/AllPrintings.json.gz"
