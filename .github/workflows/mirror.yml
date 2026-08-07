@@ -20,10 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
+      - name: build imgdl
+        run: go build -o imgdl ./cmd/imgdl
       - name: run mirror
         env:
           B2_BUCKET: ${{ vars.B2_BUCKET || 'b2://mtgban-images/magic' }}
@@ -32,7 +34,7 @@ jobs:
           SETS: ${{ inputs.sets }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          FLAGS=""
-          if [ -n "$SETS" ]; then FLAGS="$FLAGS -sets $SETS"; fi
-          if [ "$DRY_RUN" = "true" ]; then FLAGS="$FLAGS -dry-run"; fi
-          go run ./cmd/imgdl $FLAGS
+          FLAGS=()
+          if [ -n "$SETS" ]; then FLAGS+=(-sets "$SETS"); fi
+          if [ "$DRY_RUN" = "true" ]; then FLAGS+=(-dry-run); fi
+          ./imgdl "${FLAGS[@]}"
