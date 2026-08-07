@@ -1,0 +1,38 @@
+name: mirror
+on:
+  schedule:
+    - cron: "17 0 * * *"
+  workflow_dispatch:
+    inputs:
+      sets:
+        description: comma-separated set codes (empty = all)
+        required: false
+        default: ""
+      dry_run:
+        description: plan only
+        required: false
+        default: "false"
+concurrency:
+  group: mirror
+  cancel-in-progress: false
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: run mirror
+        env:
+          B2_BUCKET: ${{ vars.B2_BUCKET || 'b2://mtgban-images/magic' }}
+          B2_ACCESS_KEY: ${{ secrets.B2_ACCESS_KEY }}
+          B2_ACCESS_SECRET: ${{ secrets.B2_ACCESS_SECRET }}
+          SETS: ${{ inputs.sets }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          FLAGS=""
+          if [ -n "$SETS" ]; then FLAGS="$FLAGS -sets $SETS"; fi
+          if [ "$DRY_RUN" = "true" ]; then FLAGS="$FLAGS -dry-run"; fi
+          go run ./cmd/imgdl $FLAGS
