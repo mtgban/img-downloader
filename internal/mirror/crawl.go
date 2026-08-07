@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -24,33 +25,90 @@ const (
 	requestInterval = 100 * time.Millisecond
 	// budget for persisting state/manifest after the run context is already done
 	saveTimeout = 30 * time.Second
+	// A source host that is down, blocking us, or has moved its URL shape fails
+	// everything, while a healthy one still 404s the odd image it never
+	// published. Counting consecutive failures separates the two: any success
+	// resets it, so scattered misses cannot accumulate however long the run
+	// goes, and a host that breaks midway still trips despite the hours of
+	// successes behind it, which a cumulative rate would drown out. The longest
+	// natural run seen against TCGplayer's sealed images is ~13, from a couple
+	// of old sets sorting next to each other.
+	maxConsecutiveFailures = 50
 )
 
-type fetcher struct {
-	bucket  simplecloud.ReadWriter
-	base    string
-	client  *http.Client
-	limit   *Limiter
-	backoff func(int) time.Duration
-	log     *log.Logger
+// ErrTooManyFailures aborts a run against a source that is failing every
+// request, as opposed to one merely missing the occasional image.
+var ErrTooManyFailures = errors.New("mirror: source failing persistently")
 
-	mu     sync.Mutex
-	saveMu sync.Mutex
-	state  State
-	done   int
-	failed int
+// hostStat tracks one source host's failure streak for the circuit breaker.
+type hostStat struct{ consecutive int }
+
+type fetcher struct {
+	bucket         simplecloud.ReadWriter
+	base           string
+	client         *http.Client
+	limit          *Limiter
+	backoff        func(int) time.Duration
+	log            *log.Logger
+	maxConsecutive int
+
+	mu      sync.Mutex
+	saveMu  sync.Mutex
+	state   State
+	done    int
+	failed  int
+	hosts   map[string]*hostStat
+	tripped error
+	abort   context.CancelFunc
 }
 
 func newFetcher(bucket simplecloud.ReadWriter, base string, state State, logger *log.Logger) *fetcher {
 	return &fetcher{
-		bucket:  bucket,
-		base:    base,
-		client:  &http.Client{Timeout: 60 * time.Second},
-		limit:   &Limiter{Interval: requestInterval},
-		backoff: Backoff,
-		log:     logger,
-		state:   state,
+		bucket:         bucket,
+		base:           base,
+		client:         &http.Client{Timeout: 60 * time.Second},
+		limit:          &Limiter{Interval: requestInterval},
+		backoff:        Backoff,
+		log:            logger,
+		maxConsecutive: maxConsecutiveFailures,
+		state:          state,
 	}
+}
+
+// record accounts one attempt against host and trips the run when that host has
+// failed maxConsecutive times without a success in between. Reports whether the
+// run has been aborted.
+func (f *fetcher) record(host string, err error) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.hosts == nil {
+		f.hosts = map[string]*hostStat{}
+	}
+	stat := f.hosts[host]
+	if stat == nil {
+		stat = &hostStat{}
+		f.hosts[host] = stat
+	}
+
+	if err == nil {
+		stat.consecutive = 0
+		return f.tripped != nil
+	}
+	stat.consecutive++
+	f.failed++
+
+	if f.tripped != nil {
+		return true
+	}
+	if stat.consecutive < f.maxConsecutive {
+		return false
+	}
+	f.tripped = fmt.Errorf("%w: %s failed %d requests in a row",
+		ErrTooManyFailures, host, stat.consecutive)
+	f.log.Printf("aborting: %v", f.tripped)
+	f.abort()
+	return true
 }
 
 // FetchAll downloads keys from want, one goroutine per source host.
@@ -60,6 +118,11 @@ func FetchAll(ctx context.Context, bucket simplecloud.ReadWriter, base string, s
 }
 
 func (f *fetcher) run(ctx context.Context, want map[string]Image, keys []string) (int, int, error) {
+	// a derived context so one host tripping the breaker stops every other queue
+	runCtx, abort := context.WithCancel(ctx)
+	defer abort()
+	f.abort = abort
+
 	queues := map[string][]string{}
 	for _, key := range keys {
 		img := want[key]
@@ -80,19 +143,20 @@ func (f *fetcher) run(ctx context.Context, want map[string]Image, keys []string)
 		go func(host string, queue []string) {
 			defer wg.Done()
 			for _, key := range queue {
-				// stop taking new work once the run is cancelled
-				if ctx.Err() != nil {
+				// stop taking new work once the run is cancelled or aborted
+				if runCtx.Err() != nil {
 					return
 				}
-				if err := f.fetchOne(ctx, host, want[key]); err != nil {
-					// a fetch losing a race with cancellation is not a real failure
-					if ctx.Err() != nil {
-						return
-					}
+				err := f.fetchOne(runCtx, host, want[key])
+				// a fetch losing a race with cancellation is not a real outcome
+				if err != nil && runCtx.Err() != nil {
+					return
+				}
+				if err != nil {
 					f.log.Printf("%s: %v", key, err)
-					f.mu.Lock()
-					f.failed++
-					f.mu.Unlock()
+				}
+				if f.record(host, err) {
+					return
 				}
 			}
 		}(host, queue)
@@ -100,7 +164,7 @@ func (f *fetcher) run(ctx context.Context, want map[string]Image, keys []string)
 	wg.Wait()
 
 	f.mu.Lock()
-	done, failed := f.done, f.failed
+	done, failed, tripped := f.done, f.failed, f.tripped
 	f.mu.Unlock()
 	// nothing fetched means nothing new to persist
 	if done > 0 {
@@ -109,9 +173,13 @@ func (f *fetcher) run(ctx context.Context, want map[string]Image, keys []string)
 		}
 	}
 	f.log.Printf("fetched %d images, %d failures", done, failed)
-	// report the interrupt itself rather than the partial work it caused
+	// an interrupt outranks a trip: the operator's stop is the real reason the
+	// run ended, and only the parent context can tell the two apart
 	if ctx.Err() != nil {
 		return done, failed, ctx.Err()
+	}
+	if tripped != nil {
+		return done, failed, tripped
 	}
 	if failed > 0 {
 		return done, failed, fmt.Errorf("%d fetches failed", failed)

@@ -2,6 +2,7 @@ package mirror
 
 import (
 	"context"
+	"errors"
 	"log"
 
 	"github.com/mtgban/simplecloud"
@@ -58,11 +59,13 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 	fetched, failed, fetchErr := FetchAll(ctx, opts.Bucket, opts.Base, state, opts.Want, fetches, logger)
 	res.Fetched, res.FetchFailed = fetched, failed
 
-	// an interrupted run skips bundle work: rebuilding from a half-fetched set
-	// would only produce a bundle the next run has to redo anyway
+	// a run that stopped early skips bundle work: rebuilding from a half-fetched
+	// set would only produce a bundle the next run has to redo anyway. Ordinary
+	// scattered failures do not qualify, since those images stay absent from
+	// state and the bundle hash already accounts for their absence.
 	var bundleErr error
-	if ctx.Err() != nil {
-		logger.Printf("interrupted, skipping bundle rebuild")
+	if ctx.Err() != nil || errors.Is(fetchErr, ErrTooManyFailures) {
+		logger.Printf("run stopped early, skipping bundle rebuild")
 	} else {
 		codes := BundlesToRebuild(manifest, SetDigests(state, opts.Want))
 		res.BundlesRebuilt, bundleErr = RebuildBundles(ctx, opts.Bucket, opts.Base, state, opts.Want, manifest, codes)

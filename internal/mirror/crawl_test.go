@@ -5,12 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -274,5 +276,70 @@ func TestFetchAllInterruptStopsWithoutCountingFailures(t *testing.T) {
 	// the snapshot has to survive the cancelled context or the run is not resumable
 	if _, err := os.Stat(filepath.Join(f.base, "mirror-state.json")); err != nil {
 		t.Errorf("state not persisted after interrupt: %v", err)
+	}
+}
+
+// fetchAllKeys runs n keys against srv through a fetcher with the given breaker
+// settings, returning what f.run reported.
+func fetchAllKeys(t *testing.T, srvURL string, n, maxConsecutive int) (int, int, error) {
+	t.Helper()
+	f := testFetcher(t)
+	f.maxConsecutive = maxConsecutive
+
+	keys := make([]string, 0, n)
+	want := map[string]Image{}
+	for i := range n {
+		k := fmt.Sprintf("key-%04d", i)
+		keys = append(keys, k)
+		want[k] = Image{Key: k, URL: srvURL + "/" + k, ObjectPath: k + ".jpg"}
+	}
+	return f.run(context.Background(), want, keys)
+}
+
+func TestFetchAllAbortsWhenHostFailureRateIsHigh(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	done, failed, err := fetchAllKeys(t, srv.URL, 400, 50)
+	if !errors.Is(err, ErrTooManyFailures) {
+		t.Fatalf("err = %v, want ErrTooManyFailures", err)
+	}
+	if done != 0 {
+		t.Errorf("done = %d, want 0", done)
+	}
+	// the point of the breaker is not walking the whole queue
+	if failed > 100 {
+		t.Errorf("failed = %d, want the run to abort near the %d streak limit", failed, 50)
+	}
+	if int(hits) > 100 {
+		t.Errorf("hits = %d, breaker did not stop the requests", hits)
+	}
+}
+
+func TestFetchAllToleratesScatteredFailures(t *testing.T) {
+	// every tenth key 404s, the shape a healthy host with a few unpublished
+	// images produces; this must not abort the run
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "0") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write([]byte("jpegbytes"))
+	}))
+	defer srv.Close()
+
+	done, failed, err := fetchAllKeys(t, srv.URL, 400, 50)
+	if errors.Is(err, ErrTooManyFailures) {
+		t.Fatalf("a scattered 10%% failure rate tripped the breaker: %v", err)
+	}
+	if err == nil {
+		t.Fatal("expected the ordinary partial-failure error")
+	}
+	if done != 360 || failed != 40 {
+		t.Errorf("done=%d failed=%d, want 360 and 40: the whole queue should be walked", done, failed)
 	}
 }

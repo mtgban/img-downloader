@@ -163,6 +163,30 @@ grace period (the runner escalates SIGINT to SIGTERM to SIGKILL over roughly
 ten seconds), which a ~30 MB state flush may not fit inside. The periodic
 snapshot is the real safety net there, not the final flush.
 
+### Aborting on a broken source
+
+A source host that is down, blocking us, or has changed its URL shape would
+otherwise fail every request for hours while the run dutifully worked through
+its queue. The fetcher tracks each host's consecutive failures and aborts the
+whole run once one reaches 50, exiting non-zero with which host tripped it.
+State is still flushed, so the next run resumes rather than restarting.
+
+Consecutive failures are counted rather than a total or a rate, because both
+alternatives break on real data. Some sealed products were never published to
+TCGplayer, so a healthy backfill produces a steady trickle of legitimate 404s
+— measured at about 5.6% of sealed fetches, in bursts of up to ~13 in a row
+where old sets sort next to each other. A total would eventually cross any
+threshold on volume alone, and a rate accumulated over tens of thousands of
+successful requests could never climb high enough to catch a host that broke
+partway through. A streak resets on every success, so it stays quiet through
+scattered misses and still fires within seconds whenever a host genuinely
+stops answering, however deep into the run that happens.
+
+An aborted run skips the bundle rebuild, on the same reasoning as an
+interrupt. Ordinary scattered failures do not: those images stay absent from
+state, and the bundle hash already accounts for their absence, so a handful
+of permanently missing sealed images cannot block bundling forever.
+
 ## Sealed images
 
 Sealed product URLs come from TCGplayer and never change for a given
