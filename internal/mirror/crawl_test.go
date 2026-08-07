@@ -281,7 +281,7 @@ func TestFetchAllInterruptStopsWithoutCountingFailures(t *testing.T) {
 
 // fetchAllKeys runs n keys against srv through a fetcher with the given breaker
 // settings, returning what f.run reported.
-func fetchAllKeys(t *testing.T, srvURL string, n, maxConsecutive int) (int, int, error) {
+func fetchAllKeys(t *testing.T, srvURL string, n, maxConsecutive int) (*fetcher, int, int, error) {
 	t.Helper()
 	f := testFetcher(t)
 	f.maxConsecutive = maxConsecutive
@@ -293,7 +293,8 @@ func fetchAllKeys(t *testing.T, srvURL string, n, maxConsecutive int) (int, int,
 		keys = append(keys, k)
 		want[k] = Image{Key: k, URL: srvURL + "/" + k, ObjectPath: k + ".jpg"}
 	}
-	return f.run(context.Background(), want, keys)
+	done, failed, err := f.run(context.Background(), want, keys)
+	return f, done, failed, err
 }
 
 func TestFetchAllAbortsWhenHostFailureRateIsHigh(t *testing.T) {
@@ -304,7 +305,7 @@ func TestFetchAllAbortsWhenHostFailureRateIsHigh(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	done, failed, err := fetchAllKeys(t, srv.URL, 400, 50)
+	_, done, failed, err := fetchAllKeys(t, srv.URL, 400, 50)
 	if !errors.Is(err, ErrTooManyFailures) {
 		t.Fatalf("err = %v, want ErrTooManyFailures", err)
 	}
@@ -332,14 +333,103 @@ func TestFetchAllToleratesScatteredFailures(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	done, failed, err := fetchAllKeys(t, srv.URL, 400, 50)
-	if errors.Is(err, ErrTooManyFailures) {
-		t.Fatalf("a scattered 10%% failure rate tripped the breaker: %v", err)
+	f, done, failed, err := fetchAllKeys(t, srv.URL, 400, 50)
+	if err != nil {
+		t.Fatalf("images the source never published must not fail the run: %v", err)
 	}
-	if err == nil {
-		t.Fatal("expected the ordinary partial-failure error")
+	if done != 360 || failed != 0 {
+		t.Errorf("done=%d failed=%d, want 360 and 0: the whole queue should be walked", done, failed)
 	}
-	if done != 360 || failed != 40 {
-		t.Errorf("done=%d failed=%d, want 360 and 40: the whole queue should be walked", done, failed)
+	marked := 0
+	for _, e := range f.state {
+		if e.Missing {
+			marked++
+		}
+	}
+	if marked != 40 {
+		t.Errorf("marked %d entries not-published, want 40", marked)
+	}
+}
+
+func TestNotPublishedIsRecordedAndNotRefetched(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		if strings.HasSuffix(r.URL.Path, "gone") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write([]byte("jpegbytes"))
+	}))
+	defer srv.Close()
+
+	f := testFetcher(t)
+	want := map[string]Image{
+		"key-ok":   {Key: "key-ok", URL: srv.URL + "/ok", ObjectPath: "a/key-ok.jpg", SetCode: "NEO"},
+		"key-gone": {Key: "key-gone", URL: srv.URL + "/gone", ObjectPath: "b/key-gone.jpg", SetCode: "NEO"},
+	}
+	keys := []string{"key-gone", "key-ok"}
+
+	done, failed, err := f.run(context.Background(), want, keys)
+	if err != nil {
+		t.Fatalf("a not-published image must not fail the run: %v", err)
+	}
+	if done != 1 || failed != 0 {
+		t.Errorf("done=%d failed=%d, want 1 and 0", done, failed)
+	}
+	entry, ok := f.state["key-gone"]
+	if !ok || !entry.Missing {
+		t.Fatalf("key-gone state = %+v, want a Missing marker", entry)
+	}
+	if entry.Digest != "" {
+		t.Errorf("a missing entry must carry no digest, got %q", entry.Digest)
+	}
+
+	// the marker must keep the next run from asking again
+	if got := NeedFetch(f.state, want); len(got) != 0 {
+		t.Errorf("NeedFetch = %v, want nothing re-queued", got)
+	}
+	// and must stay out of the bundle
+	if d := SetDigests(f.state, want); len(d["NEO"]) != 1 {
+		t.Errorf("NEO digests = %v, want only the fetched key", d["NEO"])
+	}
+
+	before := atomic.LoadInt32(&hits)
+	if _, _, err := f.run(context.Background(), want, NeedFetch(f.state, want)); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&hits) != before {
+		t.Errorf("second run made %d more requests, want 0", atomic.LoadInt32(&hits)-before)
+	}
+}
+
+func TestTripTakesBackMarkersFromItsStreak(t *testing.T) {
+	// a host 404ing everything is broken, not authoritative: nothing it said
+	// during the streak may be recorded as permanently missing
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	f := testFetcher(t)
+	f.maxConsecutive = 50
+	keys := make([]string, 0, 400)
+	want := map[string]Image{}
+	for i := range 400 {
+		k := fmt.Sprintf("key-%04d", i)
+		keys = append(keys, k)
+		want[k] = Image{Key: k, URL: srv.URL + "/" + k, ObjectPath: k + ".jpg"}
+	}
+
+	if _, _, err := f.run(context.Background(), want, keys); !errors.Is(err, ErrTooManyFailures) {
+		t.Fatalf("err = %v, want ErrTooManyFailures", err)
+	}
+	for k, e := range f.state {
+		if e.Missing {
+			t.Fatalf("%s was retired during a tripped streak: %+v", k, e)
+		}
+	}
+	if len(NeedFetch(f.state, want)) != len(want) {
+		t.Error("every key must remain queued after an aborted run")
 	}
 }

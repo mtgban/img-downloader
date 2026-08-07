@@ -40,8 +40,24 @@ const (
 // request, as opposed to one merely missing the occasional image.
 var ErrTooManyFailures = errors.New("mirror: source failing persistently")
 
+// notPublishedError is a source answering that it has no image at this URL.
+// Permanent for that URL, unlike a transport error or a 5xx.
+type notPublishedError struct{ status int }
+
+func (e notPublishedError) Error() string { return fmt.Sprintf("HTTP %d", e.status) }
+
+func isNotPublished(err error) bool {
+	var e notPublishedError
+	return errors.As(err, &e)
+}
+
 // hostStat tracks one source host's failure streak for the circuit breaker.
-type hostStat struct{ consecutive int }
+// streak lists the keys marked not-published during the current streak, so a
+// trip can take them back.
+type hostStat struct {
+	consecutive int
+	streak      []string
+}
 
 type fetcher struct {
 	bucket         simplecloud.ReadWriter
@@ -57,6 +73,7 @@ type fetcher struct {
 	state   State
 	done    int
 	failed  int
+	missing int
 	hosts   map[string]*hostStat
 	tripped error
 	abort   context.CancelFunc
@@ -76,9 +93,10 @@ func newFetcher(bucket simplecloud.ReadWriter, base string, state State, logger 
 }
 
 // record accounts one attempt against host and trips the run when that host has
-// failed maxConsecutive times without a success in between. Reports whether the
-// run has been aborted.
-func (f *fetcher) record(host string, err error) bool {
+// failed maxConsecutive times without a success in between. A source reporting
+// no image at a URL is recorded in state so later runs skip it. Reports whether
+// the run has been aborted.
+func (f *fetcher) record(host string, img Image, err error) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -92,17 +110,35 @@ func (f *fetcher) record(host string, err error) bool {
 	}
 
 	if err == nil {
-		stat.consecutive = 0
+		stat.consecutive, stat.streak = 0, nil
 		return f.tripped != nil
 	}
 	stat.consecutive++
-	f.failed++
+	if isNotPublished(err) {
+		f.state[img.Key] = StateEntry{
+			FetchedAt: time.Now().UTC().Format(time.RFC3339),
+			Source:    img.URL,
+			Missing:   true,
+		}
+		f.missing++
+		stat.streak = append(stat.streak, img.Key)
+	} else {
+		f.failed++
+	}
 
 	if f.tripped != nil {
 		return true
 	}
 	if stat.consecutive < f.maxConsecutive {
 		return false
+	}
+	// A host failing this consistently is broken, not authoritative about what
+	// it publishes, so take back the markers this streak wrote. Otherwise an
+	// outage would permanently retire every image it happened to answer for,
+	// and a sealed URL never changes to trigger a retry.
+	for _, key := range stat.streak {
+		delete(f.state, key)
+		f.missing--
 	}
 	f.tripped = fmt.Errorf("%w: %s failed %d requests in a row",
 		ErrTooManyFailures, host, stat.consecutive)
@@ -152,10 +188,11 @@ func (f *fetcher) run(ctx context.Context, want map[string]Image, keys []string)
 				if err != nil && runCtx.Err() != nil {
 					return
 				}
-				if err != nil {
+				// expected misses are summarised at the end, not one line each
+				if err != nil && !isNotPublished(err) {
 					f.log.Printf("%s: %v", key, err)
 				}
-				if f.record(host, err) {
+				if f.record(host, want[key], err) {
 					return
 				}
 			}
@@ -164,15 +201,15 @@ func (f *fetcher) run(ctx context.Context, want map[string]Image, keys []string)
 	wg.Wait()
 
 	f.mu.Lock()
-	done, failed, tripped := f.done, f.failed, f.tripped
+	done, failed, missing, tripped := f.done, f.failed, f.missing, f.tripped
 	f.mu.Unlock()
-	// nothing fetched means nothing new to persist
-	if done > 0 {
+	// markers count as progress, so persist when either moved
+	if done > 0 || missing > 0 {
 		if err := f.saveSnapshot(ctx); err != nil {
 			return done, failed, err
 		}
 	}
-	f.log.Printf("fetched %d images, %d failures", done, failed)
+	f.log.Printf("fetched %d images, %d not published at source, %d failures", done, missing, failed)
 	// an interrupt outranks a trip: the operator's stop is the real reason the
 	// run ended, and only the parent context can tell the two apart
 	if ctx.Err() != nil {
@@ -282,6 +319,9 @@ func (f *fetcher) download(ctx context.Context, host, srcURL string) ([]byte, er
 			}
 		default:
 			resp.Body.Close()
+			if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
+				return nil, notPublishedError{resp.StatusCode}
+			}
 			return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 		}
 	}

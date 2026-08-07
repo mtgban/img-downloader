@@ -25,6 +25,7 @@ type Result struct {
 	Pending        int
 	Fetched        int
 	FetchFailed    int
+	NotPublished   int
 	BundlesRebuilt int
 }
 
@@ -58,6 +59,7 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 
 	fetched, failed, fetchErr := FetchAll(ctx, opts.Bucket, opts.Base, state, opts.Want, fetches, logger)
 	res.Fetched, res.FetchFailed = fetched, failed
+	res.NotPublished = NotPublishedCount(state, opts.Want)
 
 	// a run that stopped early skips bundle work: rebuilding from a half-fetched
 	// set would only produce a bundle the next run has to redo anyway. Ordinary

@@ -34,7 +34,9 @@ updating both this tool and the website consumer.
   (sorted, `zip.Store`, mtime epoch 0). Image key is the scryfallId for
   singles, `p-<SETCODE>-<tcgId>` for sealed.
 - Bundle hash: fnv64a hex over sorted `"<key> <sha256hex>\n"` lines.
-- State JSON: `{"<imageKey>": {"digest": "<sha256hex>", "fetchedAt": "RFC3339", "source": "<url>"}}`.
+- State JSON: `{"<imageKey>": {"digest": "<sha256hex>", "fetchedAt": "RFC3339", "source": "<url>"}}`,
+  plus an optional `"missing": true` on entries the source has no image for
+  (see below); those carry no digest and are never bundled.
   A key is refetched when its stored `source` differs from the currently
   wanted URL. Sealed URLs never change, so sealed images are fetch-once.
   `source` keeps the whole Scryfall URL including its `?<epoch>` query, which
@@ -183,9 +185,31 @@ scattered misses and still fires within seconds whenever a host genuinely
 stops answering, however deep into the run that happens.
 
 An aborted run skips the bundle rebuild, on the same reasoning as an
-interrupt. Ordinary scattered failures do not: those images stay absent from
-state, and the bundle hash already accounts for their absence, so a handful
+interrupt. Ordinary scattered failures do not: those images stay out of the
+bundle, and the bundle hash already accounts for their absence, so a handful
 of permanently missing sealed images cannot block bundling forever.
+
+### Images the source never published
+
+A 404 or 410 means the host answered and has no image at that URL, which for
+a given URL is permanent — unlike a timeout or a 5xx. Those are recorded in
+state with `"missing": true` and no digest, so `NeedFetch` skips them on
+later runs. Without that, every one would be re-requested on every run
+forever: roughly 840 doomed requests a day, about 84 seconds of a run, and a
+wall of alarming log lines each morning for images that are simply not
+coming. They are logged as a count rather than a line each, are reported as
+`notPublished` separately from `fetchFailed`, and do not fail the run.
+
+The marker is keyed on the source URL like any other entry, so it is not
+permanent in the wrong way: if the URL changes — a Scryfall reprocess bumping
+its `?<epoch>` — the image is fetched again. Sealed URLs never change, so a
+sealed product TCGplayer never published stays retired.
+
+Markers written during a streak that goes on to trip the breaker are taken
+back before the run ends. A host failing every request is broken, not
+authoritative about what it publishes, and since a sealed URL never changes
+there would be nothing to trigger a retry of anything it was wrongly asked
+about during an outage.
 
 ## Sealed images
 

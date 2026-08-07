@@ -77,7 +77,7 @@ func SetDigests(state State, want map[string]Image) map[string]map[string]string
 	out := map[string]map[string]string{}
 	for key, img := range want {
 		entry, found := state[key]
-		if !found {
+		if !found || entry.Missing {
 			continue
 		}
 		m := out[img.SetCode]
@@ -113,4 +113,15 @@ func Domains(want map[string]Image) map[string]int {
 		out[u.Host]++
 	}
 	return out
+}
+
+// NotPublishedCount counts the wanted keys recorded as having no image at source.
+func NotPublishedCount(state State, want map[string]Image) int {
+	n := 0
+	for key := range want {
+		if state[key].Missing {
+			n++
+		}
+	}
+	return n
 }

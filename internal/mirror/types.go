@@ -21,11 +21,15 @@ type ImageInfo struct {
 // Manifest is the images-manifest.json document, keyed by set code.
 type Manifest map[string]ImageInfo
 
-// StateEntry records one mirrored image in mirror-state.json.
+// StateEntry records one mirrored image in mirror-state.json. Missing marks a
+// source that answered but has no image at that URL, recorded so later runs
+// skip it instead of refetching it forever; such an entry has no Digest and is
+// not bundled.
 type StateEntry struct {
 	Digest    string `json:"digest"`
 	FetchedAt string `json:"fetchedAt"`
 	Source    string `json:"source"`
+	Missing   bool   `json:"missing,omitempty"`
 }
 
 // State is the mirror-state.json document, keyed by image key.
