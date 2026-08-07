@@ -37,6 +37,14 @@ updating both this tool and the website consumer.
 - State JSON: `{"<imageKey>": {"digest": "<sha256hex>", "fetchedAt": "RFC3339", "source": "<url>"}}`.
   A key is refetched when its stored `source` differs from the currently
   wanted URL. Sealed URLs never change, so sealed images are fetch-once.
+  `source` keeps the whole Scryfall URL including its `?<epoch>` query, which
+  Scryfall bumps whenever it reprocesses an image, so a reprocess is what
+  triggers the refetch. The object path is derived from the URL path only, so
+  the refetch overwrites in place rather than orphaning a second object, and
+  the new sha256 changes the set's bundle hash so the zip rebuilds too. Note
+  that this tracks reprocessing, not relocation: were Scryfall to change the
+  path rather than the query, the new object is written correctly but the old
+  one is left behind.
 - No backfill marker file. Images are stored as jpg only, no webp, no cwebp.
 
 ## Usage
@@ -78,25 +86,82 @@ documents) and can also be triggered manually via workflow_dispatch with
 org or repo-level Actions variable of the same name if one is set; org-level
 variables and secrets are picked up automatically, no workflow edits needed.
 
+The job's `timeout-minutes` is 350, just under the 360 minute ceiling GitHub
+enforces on hosted runners. That is sized for the initial backfill, which is
+the only run that comes close to it; see below for the arithmetic.
+
 Notes on GitHub's scheduled workflows: schedules only fire from the default
 branch, and on public repos GitHub disables schedules after 60 days with no
 repository activity, so it needs a commit or manual run periodically to stay
-alive.
+alive. Scheduled runs are also best-effort and are commonly delayed under
+load, which is what the minute-17 offset is hedging against.
 
 ## Initial backfill
 
-The first run against an empty bucket has to fetch everything: roughly 90k
-images at the enforced 100ms per host delay, about 3-4 hours total. Run it
-locally or trigger the workflow manually (workflow_dispatch, leave `sets`
-empty for a full run). State saves every 200 fetched images, so an
-interrupted run resumes from where it left off instead of restarting; rerun
-the same command and it only fetches what is still missing.
+The first run against an empty bucket has to fetch everything. As of the
+2026-08-07 dry run that is **119,797 images**, nearly all of them singles on
+the single host `cards.scryfall.io`; sealed images come from a second host
+and are fetched in parallel, so the singles determine the wall clock.
+
+The limiter books slots 100ms apart in absolute time rather than sleeping
+100ms between requests, so a download shorter than the interval is absorbed
+by it instead of adding to it. The steady-state rate is therefore one image
+per 100ms, not 100ms plus transfer time — a mirror of NEO measured 572
+images in 57s, or 99.6ms each. That puts the full backfill at roughly three
+hours, plus about forty minutes for the first bundle build (see below), so
+around 3.5-4 hours against the workflow's 350 minute timeout. The rate only
+degrades if a download exceeds 100ms, which a ~100KB jpg does not.
+
+Run it locally or trigger the workflow manually (workflow_dispatch, leave
+`sets` empty for a full run). State saves every 200 fetched images — about
+every 20 seconds at the above rate — so an interrupted run resumes from
+where it left off instead of restarting; rerun the same command and it only
+fetches what is still missing.
+
+Two costs are specific to the first run. Every set's bundle is rebuilt
+because the manifest starts empty, and a rebuild reads its members back out
+of the bucket, so the run pulls all ~119k images down again (~30 GB of B2
+egress, the billed direction) and uploads a comparable volume of zips. And
+the state document reaches about 30 MB at full scale (~255 bytes per entry),
+rewritten whole on every snapshot — roughly 9 GB of writes across a backfill.
+That is B2 ingress, which is not billed, so it costs throughput rather than
+money. Steady-state daily runs rebuild only the sets that changed and so pay
+neither.
+
+## Interrupts and durability
 
 SIGINT (Ctrl-C) and SIGTERM stop the crawl gracefully: in-flight work is
 abandoned, no bundle is rebuilt from a half-fetched set, and state is
 flushed on a context that outlives the cancellation before the process exits
-130. A second signal kills immediately, skipping that flush and losing at
-most the images fetched since the last periodic snapshot.
+130. A second signal kills immediately, skipping that flush.
+
+Losing that flush is cheap, because state is never ahead of the bucket. A
+fetch records its state entry only after the object's `Close` returns, and
+`Close` is what commits the upload to B2, so every failure path leaves the
+key absent rather than falsely marked done. The invariant is that state is a
+subset of what is actually stored, which makes both failure modes safe in
+the same direction:
+
+- The upload fails, no entry is written, and the next run refetches.
+- The upload succeeds but the process dies before the next snapshot, so the
+  image sits in the bucket unrecorded and the next run refetches it and
+  rewrites identical bytes.
+
+Neither can cause an image to be skipped, only refetched, so the ≤200 image
+snapshot gap costs redundant work rather than correctness. Snapshots are
+themselves single object commits, so a kill mid-write leaves the previous
+snapshot intact rather than a truncated file.
+
+One limit worth naming: the digest stored is computed from the bytes in
+memory before the write, not read back afterwards, so it records what was
+sent rather than a round-trip verification of what landed. A successful
+`Close` is the integrity guard — the B2 upload is checksum-validated, so a
+corrupted transfer surfaces as a `Close` error rather than a bad digest.
+
+Under the workflow's `timeout-minutes`, a cancelled job gets only a short
+grace period (the runner escalates SIGINT to SIGTERM to SIGKILL over roughly
+ten seconds), which a ~30 MB state flush may not fit inside. The periodic
+snapshot is the real safety net there, not the final flush.
 
 ## Sealed images
 
