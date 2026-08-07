@@ -10,12 +10,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
-	"github.com/mtgban/simplecloud"
 	"github.com/mtgban/img-downloader/internal/mirror"
 	"github.com/mtgban/img-downloader/internal/mtgjson"
 	"github.com/mtgban/img-downloader/internal/scryfall"
+	"github.com/mtgban/simplecloud"
 )
 
 const allPrintingsURL = "https://mtgjson.com/api/v5/AllPrintings.json.gz"
@@ -31,10 +33,26 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctx := context.Background()
-	if err := run(ctx, bucketEnv, *setsFlag, *dryRun, *skipSealed); err != nil {
+	if err := run(signalContext(), bucketEnv, *setsFlag, *dryRun, *skipSealed); err != nil {
+		if errors.Is(err, context.Canceled) {
+			// state is snapshotted as the crawl goes, so a rerun picks up where this left off
+			log.Print("interrupted, progress saved; rerun the same command to resume")
+			os.Exit(130)
+		}
 		log.Fatal(err)
 	}
+}
+
+// signalContext returns a context cancelled by the first SIGINT or SIGTERM.
+// Default handling is restored once it fires, so a second signal kills a run
+// that is too wedged to unwind on its own.
+func signalContext() context.Context {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
+	return ctx
 }
 
 // requireBucketEnv reads B2_BUCKET and errors clearly if it is unset.
@@ -108,7 +126,20 @@ func loadScryfallURLs(ctx context.Context) (map[string]string, error) {
 		}
 		return nil
 	})
-	return urls, err
+	if err != nil {
+		return nil, interrupted(ctx, err)
+	}
+	return urls, nil
+}
+
+// interrupted prefers ctx's error over err. Cancelling a stream mid-read leaves
+// the decoder holding a truncated record, so the parse error it reports would
+// otherwise mask the interrupt that caused it.
+func interrupted(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	return err
 }
 
 // loadMTGJSONSets fetches and streams AllPrintings.json.gz into a slice of SetImages.
@@ -124,7 +155,10 @@ func loadMTGJSONSets(ctx context.Context) ([]mtgjson.SetImages, error) {
 		sets = append(sets, s)
 		return nil
 	})
-	return sets, err
+	if err != nil {
+		return nil, interrupted(ctx, err)
+	}
+	return sets, nil
 }
 
 // parseSets splits a CSV of set codes into an uppercased filter set, nil when empty.

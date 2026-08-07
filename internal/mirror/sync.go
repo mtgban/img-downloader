@@ -58,15 +58,23 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 	fetched, failed, fetchErr := FetchAll(ctx, opts.Bucket, opts.Base, state, opts.Want, fetches, logger)
 	res.Fetched, res.FetchFailed = fetched, failed
 
-	codes := BundlesToRebuild(manifest, SetDigests(state, opts.Want))
-	rebuilt, bundleErr := RebuildBundles(ctx, opts.Bucket, opts.Base, state, opts.Want, manifest, codes)
-	res.BundlesRebuilt = rebuilt
+	// an interrupted run skips bundle work: rebuilding from a half-fetched set
+	// would only produce a bundle the next run has to redo anyway
+	var bundleErr error
+	if ctx.Err() != nil {
+		logger.Printf("interrupted, skipping bundle rebuild")
+	} else {
+		codes := BundlesToRebuild(manifest, SetDigests(state, opts.Want))
+		res.BundlesRebuilt, bundleErr = RebuildBundles(ctx, opts.Bucket, opts.Base, state, opts.Want, manifest, codes)
+	}
 
-	// manifest and state persist even when fetch or bundle work failed
-	if err := SaveManifest(ctx, opts.Bucket, opts.Base, manifest); err != nil {
+	// manifest and state persist even when the run was interrupted or work failed
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveTimeout)
+	defer cancel()
+	if err := SaveManifest(saveCtx, opts.Bucket, opts.Base, manifest); err != nil {
 		return res, err
 	}
-	if err := SaveState(ctx, opts.Bucket, opts.Base, state); err != nil {
+	if err := SaveState(saveCtx, opts.Bucket, opts.Base, state); err != nil {
 		return res, err
 	}
 

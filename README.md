@@ -92,6 +92,12 @@ empty for a full run). State saves every 200 fetched images, so an
 interrupted run resumes from where it left off instead of restarting; rerun
 the same command and it only fetches what is still missing.
 
+SIGINT (Ctrl-C) and SIGTERM stop the crawl gracefully: in-flight work is
+abandoned, no bundle is rebuilt from a half-fetched set, and state is
+flushed on a context that outlives the cancellation before the process exits
+130. A second signal kills immediately, skipping that flush and losing at
+most the images fetched since the last periodic snapshot.
+
 ## Sealed images
 
 Sealed product URLs come from TCGplayer and never change for a given

@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"reflect"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/mtgban/simplecloud"
 )
@@ -68,5 +70,17 @@ func TestRequireBucketEnvSet(t *testing.T) {
 	}
 	if got != "./tmp-mirror" {
 		t.Errorf("requireBucketEnv() = %q, want %q", got, "./tmp-mirror")
+	}
+}
+
+func TestSignalContextCancelsOnSIGTERM(t *testing.T) {
+	ctx := signalContext()
+	if err := syscall.Kill(syscall.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ctx.Done():
+	case <-time.After(10 * time.Second):
+		t.Fatal("signalContext did not cancel on SIGTERM")
 	}
 }

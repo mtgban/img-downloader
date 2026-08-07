@@ -2,12 +2,14 @@ package mirror
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/mtgban/simplecloud"
@@ -139,5 +141,45 @@ func TestRunDryRunPlansWithoutWriting(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(filepath.FromSlash(base), "mirror-state.json")); !os.IsNotExist(err) {
 		t.Error("dry run must not write state")
+	}
+}
+
+func TestRunInterruptSkipsBundlesButPersistsState(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&hits, 1) == 2 {
+			cancel()
+			<-r.Context().Done()
+			return
+		}
+		w.Write([]byte("imgbytes"))
+	}))
+	defer srv.Close()
+
+	base := filepath.ToSlash(t.TempDir())
+	bucket := &simplecloud.FileBucket{}
+	want := map[string]Image{}
+	for _, k := range []string{"card-a", "card-b", "card-c"} {
+		want[k] = Image{Key: k, URL: srv.URL + "/" + k, ObjectPath: k + ".jpg", SetCode: "NEO"}
+	}
+
+	res, err := Run(ctx, Opts{Bucket: bucket, Base: base, Want: want, Log: discardLog()})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if res.BundlesRebuilt != 0 {
+		t.Errorf("BundlesRebuilt = %d, want 0: an interrupted run must not bundle a half-fetched set", res.BundlesRebuilt)
+	}
+
+	// partial progress must land so the next run resumes rather than refetching
+	state, err := LoadState(context.Background(), bucket, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state) != 1 {
+		t.Errorf("state has %d entries, want the 1 image fetched before the interrupt", len(state))
 	}
 }

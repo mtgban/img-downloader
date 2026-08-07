@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -234,5 +235,44 @@ func TestRunStopsPromptlyOnCancelAndSavesSnapshot(t *testing.T) {
 	}
 	if _, ok := got["key-a"]; !ok {
 		t.Error("state snapshot missing the key fetched before cancellation")
+	}
+}
+
+func TestFetchAllInterruptStopsWithoutCountingFailures(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// interrupt arrives while the second image is in flight
+		if atomic.AddInt32(&hits, 1) == 2 {
+			cancel()
+			<-r.Context().Done()
+			return
+		}
+		w.Write([]byte("jpegbytes"))
+	}))
+	defer srv.Close()
+
+	f := testFetcher(t)
+	keys := []string{"key-a", "key-b", "key-c", "key-d"}
+	want := map[string]Image{}
+	for _, k := range keys {
+		want[k] = Image{Key: k, URL: srv.URL + "/" + k, ObjectPath: k + ".jpg"}
+	}
+
+	done, failed, err := f.run(ctx, want, keys)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if failed != 0 {
+		t.Errorf("failed = %d, want 0: an interrupt is not a fetch failure", failed)
+	}
+	if done != 1 {
+		t.Errorf("done = %d, want 1 fetched before the interrupt landed", done)
+	}
+	// the snapshot has to survive the cancelled context or the run is not resumable
+	if _, err := os.Stat(filepath.Join(f.base, "mirror-state.json")); err != nil {
+		t.Errorf("state not persisted after interrupt: %v", err)
 	}
 }

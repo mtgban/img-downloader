@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mtgban/simplecloud"
 	"github.com/mtgban/img-downloader/internal/scryfall"
+	"github.com/mtgban/simplecloud"
 )
 
 const (
@@ -22,6 +22,8 @@ const (
 	// snapshot every N fetches so an interrupted crawl can resume
 	stateSaveEvery  = 200
 	requestInterval = 100 * time.Millisecond
+	// budget for persisting state/manifest after the run context is already done
+	saveTimeout = 30 * time.Second
 )
 
 type fetcher struct {
@@ -83,6 +85,10 @@ func (f *fetcher) run(ctx context.Context, want map[string]Image, keys []string)
 					return
 				}
 				if err := f.fetchOne(ctx, host, want[key]); err != nil {
+					// a fetch losing a race with cancellation is not a real failure
+					if ctx.Err() != nil {
+						return
+					}
 					f.log.Printf("%s: %v", key, err)
 					f.mu.Lock()
 					f.failed++
@@ -103,6 +109,10 @@ func (f *fetcher) run(ctx context.Context, want map[string]Image, keys []string)
 		}
 	}
 	f.log.Printf("fetched %d images, %d failures", done, failed)
+	// report the interrupt itself rather than the partial work it caused
+	if ctx.Err() != nil {
+		return done, failed, ctx.Err()
+	}
 	if failed > 0 {
 		return done, failed, fmt.Errorf("%d fetches failed", failed)
 	}
@@ -155,7 +165,9 @@ func (f *fetcher) fetchOne(ctx context.Context, host string, img Image) error {
 // download GETs the image with per host spacing and backoff on 429/5xx.
 func (f *fetcher) download(ctx context.Context, host, srcURL string) ([]byte, error) {
 	for attempt := 0; ; attempt++ {
-		time.Sleep(f.limit.Reserve(host, time.Now()))
+		if err := sleepCtx(ctx, f.limit.Reserve(host, time.Now())); err != nil {
+			return nil, err
+		}
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, srcURL, nil)
 		if err != nil {
@@ -228,7 +240,7 @@ func (f *fetcher) saveSnapshot(ctx context.Context) error {
 	f.mu.Unlock()
 
 	// save survives a cancelled run so the crawl stays resumable
-	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveTimeout)
 	defer cancel()
 
 	f.saveMu.Lock()

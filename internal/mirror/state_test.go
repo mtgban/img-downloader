@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mtgban/simplecloud"
 	"github.com/mtgban/img-downloader/internal/mirror"
+	"github.com/mtgban/simplecloud"
 )
 
 // errBucket fails every read with a fixed non-not-found error.
