@@ -435,7 +435,8 @@ func TestTripTakesBackMarkersFromItsStreak(t *testing.T) {
 	}
 }
 
-func TestFetchAllLogsProgressPeriodically(t *testing.T) {
+func runWithProgress(t *testing.T, interval time.Duration) string {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("jpegbytes"))
 	}))
@@ -444,7 +445,7 @@ func TestFetchAllLogsProgressPeriodically(t *testing.T) {
 	var buf bytes.Buffer
 	f := testFetcher(t)
 	f.log = log.New(&buf, "", 0)
-	f.progressEvery = 10
+	f.progressInterval = interval
 
 	keys := make([]string, 0, 25)
 	want := map[string]Image{}
@@ -456,10 +457,25 @@ func TestFetchAllLogsProgressPeriodically(t *testing.T) {
 	if _, _, err := f.run(context.Background(), want, keys); err != nil {
 		t.Fatal(err)
 	}
+	return buf.String()
+}
 
-	// one line at 10 and one at 20, the 25th run out before the next multiple
-	got := strings.Count(buf.String(), "fetched 10/25 (40%)") + strings.Count(buf.String(), "fetched 20/25 (80%)")
-	if got != 2 {
-		t.Errorf("progress lines = %d, want 2, in:\n%s", got, buf.String())
+func TestFetchAllLogsProgressPeriodically(t *testing.T) {
+	// an interval this short elapses between fetches, so the crawl reports
+	// repeatedly rather than only in the final summary
+	out := runWithProgress(t, time.Nanosecond)
+	if n := strings.Count(out, "/25 ("); n < 2 {
+		t.Errorf("progress lines = %d, want repeated reporting, in:\n%s", n, out)
+	}
+}
+
+func TestFetchAllStaysQuietWithinTheInterval(t *testing.T) {
+	// nothing but the closing summary should appear before the first interval
+	out := runWithProgress(t, time.Hour)
+	if n := strings.Count(out, "/25 ("); n != 0 {
+		t.Errorf("progress lines = %d, want none inside the interval, in:\n%s", n, out)
+	}
+	if !strings.Contains(out, "fetched 25 images") {
+		t.Errorf("missing the final summary, got:\n%s", out)
 	}
 }

@@ -26,9 +26,11 @@ const (
 	// budget for persisting state/manifest after the run context is already done
 	saveTimeout = 30 * time.Second
 	// A backfill fetches for hours and only ever logs errors, so without this
-	// a healthy run is indistinguishable from a hung one. At the 100ms request
-	// spacing this is a line every few minutes.
-	progressEvery = 2000
+	// a healthy run is indistinguishable from a hung one. Timed rather than
+	// every N images because the per-image rate varies more than threefold
+	// between a local run and a CI runner, so any count tuned for one is
+	// either silent or deafening on the other.
+	progressInterval = 30 * time.Second
 	// A source host that is down, blocking us, or has moved its URL shape fails
 	// everything, while a healthy one still 404s the odd image it never
 	// published. Counting consecutive failures separates the two: any success
@@ -64,38 +66,39 @@ type hostStat struct {
 }
 
 type fetcher struct {
-	bucket         simplecloud.ReadWriter
-	base           string
-	client         *http.Client
-	limit          *Limiter
-	backoff        func(int) time.Duration
-	log            *log.Logger
-	maxConsecutive int
-	progressEvery  int
-	total          int
+	bucket           simplecloud.ReadWriter
+	base             string
+	client           *http.Client
+	limit            *Limiter
+	backoff          func(int) time.Duration
+	log              *log.Logger
+	maxConsecutive   int
+	progressInterval time.Duration
+	total            int
 
-	mu      sync.Mutex
-	saveMu  sync.Mutex
-	state   State
-	done    int
-	failed  int
-	missing int
-	hosts   map[string]*hostStat
-	tripped error
-	abort   context.CancelFunc
+	mu           sync.Mutex
+	saveMu       sync.Mutex
+	state        State
+	done         int
+	failed       int
+	missing      int
+	hosts        map[string]*hostStat
+	tripped      error
+	lastProgress time.Time
+	abort        context.CancelFunc
 }
 
 func newFetcher(bucket simplecloud.ReadWriter, base string, state State, logger *log.Logger) *fetcher {
 	return &fetcher{
-		bucket:         bucket,
-		base:           base,
-		client:         &http.Client{Timeout: 60 * time.Second},
-		limit:          &Limiter{Interval: requestInterval},
-		backoff:        Backoff,
-		log:            logger,
-		maxConsecutive: maxConsecutiveFailures,
-		progressEvery:  progressEvery,
-		state:          state,
+		bucket:           bucket,
+		base:             base,
+		client:           &http.Client{Timeout: 60 * time.Second},
+		limit:            &Limiter{Interval: requestInterval},
+		backoff:          Backoff,
+		log:              logger,
+		maxConsecutive:   maxConsecutiveFailures,
+		progressInterval: progressInterval,
+		state:            state,
 	}
 }
 
@@ -166,6 +169,7 @@ func (f *fetcher) run(ctx context.Context, want map[string]Image, keys []string)
 	defer abort()
 	f.abort = abort
 	f.total = len(keys)
+	f.lastProgress = time.Now()
 
 	queues := map[string][]string{}
 	for _, key := range keys {
@@ -265,9 +269,14 @@ func (f *fetcher) fetchOne(ctx context.Context, host string, img Image) error {
 	f.done++
 	done, missing := f.done, f.missing
 	save := done%stateSaveEvery == 0
+	now := time.Now()
+	report := f.progressInterval > 0 && now.Sub(f.lastProgress) >= f.progressInterval
+	if report {
+		f.lastProgress = now
+	}
 	f.mu.Unlock()
 
-	if f.progressEvery > 0 && done%f.progressEvery == 0 {
+	if report {
 		f.logProgress(done, missing)
 	}
 	// periodic saves keep an interrupted crawl resumable

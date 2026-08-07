@@ -131,16 +131,19 @@ every 20 seconds at the above rate — so an interrupted run resumes from
 where it left off instead of restarting; rerun the same command and it only
 fetches what is still missing.
 
-Progress is reported every 2000 images, roughly every few minutes, and every
-50 bundles during the rebuild:
+Progress is reported every 30 seconds during the crawl, and every 20 bundles
+during the rebuild:
 
 ```
 fetched 24000/119797 (20%), 412 not published at source
-rebuilt 250/1043 bundles
+rebuilt 240/1043 bundles
 ```
 
 Both phases otherwise log only errors, which over a run this long makes a
-healthy mirror indistinguishable from a hung one.
+healthy mirror indistinguishable from a hung one. The crawl reports on
+elapsed time rather than an image count because the per-image rate differs
+more than threefold between a local run and a CI runner, so a count tuned for
+one is either silent or deafening on the other.
 
 Two costs are specific to the first run. Every set's bundle is rebuilt
 because the manifest starts empty, and a rebuild reads its members back out

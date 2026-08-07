@@ -12,7 +12,7 @@ import (
 
 // A first run rebuilds every set, reading each one's images back out of the
 // bucket, which is tens of minutes of otherwise silent work.
-const bundleProgressEvery = 50
+const bundleProgressEvery = 20
 
 // RebuildBundles rebuilds each set's zip; failures are per set, caller saves manifest.
 func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base string, state State, want map[string]Image, manifest Manifest, codes []string, logger *log.Logger) (int, error) {
