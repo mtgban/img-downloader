@@ -127,7 +127,7 @@ func TestBuildWantSealed(t *testing.T) {
 	wantImg := Image{
 		Key:        "p-NEO-111",
 		URL:        "https://product-images.tcgplayer.com/111.jpg",
-		ObjectPath: "NEO/sealed/111.jpg",
+		ObjectPath: "sealed/NEO/111.jpg",
 		SetCode:    "NEO",
 	}
 	if got != wantImg {

@@ -26,6 +26,7 @@ func main() {
 	setsFlag := flag.String("sets", "", "CSV of set codes to mirror, empty means all sets")
 	dryRun := flag.Bool("dry-run", false, "print the fetch plan without fetching or writing")
 	skipSealed := flag.Bool("skip-sealed", false, "skip the TCGplayer sealed product pass")
+	refetchSealed := flag.Bool("refetch-sealed", false, "re-store every sealed image, for applying a sealed object path change")
 	flag.Parse()
 
 	bucketEnv, err := requireBucketEnv()
@@ -33,7 +34,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := run(signalContext(), bucketEnv, *setsFlag, *dryRun, *skipSealed); err != nil {
+	if err := run(signalContext(), bucketEnv, *setsFlag, *dryRun, *skipSealed, *refetchSealed); err != nil {
 		if errors.Is(err, context.Canceled) {
 			// state is snapshotted as the crawl goes, so a rerun picks up where this left off
 			log.Print("interrupted, progress saved; rerun the same command to resume")
@@ -64,7 +65,7 @@ func requireBucketEnv() (string, error) {
 	return bucket, nil
 }
 
-func run(ctx context.Context, bucketEnv, setsFlag string, dryRun, skipSealed bool) error {
+func run(ctx context.Context, bucketEnv, setsFlag string, dryRun, skipSealed, refetchSealed bool) error {
 	bucket, base, err := openBucket(ctx, bucketEnv)
 	if err != nil {
 		return err
@@ -84,7 +85,7 @@ func run(ctx context.Context, bucketEnv, setsFlag string, dryRun, skipSealed boo
 	log.Printf("%d scryfall IDs referenced by mtgjson had no bulk-data match", len(missing))
 	log.Printf("%d sealed refs had an invalid set code or tcgplayer id", invalidSealed)
 
-	opts := mirror.Opts{Bucket: bucket, Base: base, Want: want, DryRun: dryRun, SkipSealed: skipSealed, Log: log.Default()}
+	opts := mirror.Opts{Bucket: bucket, Base: base, Want: want, DryRun: dryRun, SkipSealed: skipSealed, RefetchSealed: refetchSealed, Log: log.Default()}
 	result, runErr := mirror.Run(ctx, opts)
 	fmt.Printf("pending=%d fetched=%d notPublished=%d fetchFailed=%d bundlesRebuilt=%d\n",
 		result.Pending, result.Fetched, result.NotPublished, result.FetchFailed, result.BundlesRebuilt)

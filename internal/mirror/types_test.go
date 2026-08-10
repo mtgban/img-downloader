@@ -73,7 +73,7 @@ func TestSealedKeyAndPath(t *testing.T) {
 	if k := mirror.SealedKey("MH3", "541185"); k != "p-MH3-541185" {
 		t.Fatalf("key %q", k)
 	}
-	if p := mirror.SealedObjectPath("MH3", "541185"); p != "MH3/sealed/541185.jpg" {
+	if p := mirror.SealedObjectPath("MH3", "541185"); p != "sealed/MH3/541185.jpg" {
 		t.Fatalf("path %q", p)
 	}
 }

@@ -78,8 +78,10 @@ func SingleObjectPath(sourceURL string) (string, error) {
 }
 
 // SealedObjectPath returns the bucket object path for a sealed product image.
+// Sealed lives under one shared prefix rather than a directory per set code,
+// so the bucket root holds only the handful of top level trees.
 func SealedObjectPath(setCode, tcgID string) string {
-	return fmt.Sprintf("%s/sealed/%s.jpg", setCode, tcgID)
+	return fmt.Sprintf("sealed/%s/%s.jpg", setCode, tcgID)
 }
 
 // SealedKey returns the manifest/state image key for a sealed product.

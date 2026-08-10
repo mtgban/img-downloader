@@ -84,7 +84,7 @@ func TestRunSkipSealedDoesNotFetchButKeepsBundle(t *testing.T) {
 	base := filepath.ToSlash(t.TempDir())
 	bucket := &simplecloud.FileBucket{}
 	sealedOnly := map[string]Image{
-		"p-NEO-111": {Key: "p-NEO-111", URL: sealedSrv.URL + "/111.jpg", ObjectPath: "NEO/sealed/111.jpg", SetCode: "NEO"},
+		"p-NEO-111": {Key: "p-NEO-111", URL: sealedSrv.URL + "/111.jpg", ObjectPath: "sealed/NEO/111.jpg", SetCode: "NEO"},
 	}
 
 	// prior run actually fetches the sealed image, establishing its bundle membership
@@ -181,5 +181,47 @@ func TestRunInterruptSkipsBundlesButPersistsState(t *testing.T) {
 	}
 	if len(state) != 1 {
 		t.Errorf("state has %d entries, want the 1 image fetched before the interrupt", len(state))
+	}
+}
+
+func TestRunRefetchSealedRestoresThemAtTheCurrentPath(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Write([]byte("sealed-bytes"))
+	}))
+	defer srv.Close()
+
+	base := filepath.ToSlash(t.TempDir())
+	bucket := &simplecloud.FileBucket{}
+	want := map[string]Image{
+		"p-NEO-111": {Key: "p-NEO-111", URL: srv.URL + "/111.jpg", ObjectPath: SealedObjectPath("NEO", "111"), SetCode: "NEO"},
+		"card-a":    {Key: "card-a", URL: srv.URL + "/a.jpg", ObjectPath: "a/card-a.jpg", SetCode: "NEO"},
+	}
+
+	if _, err := Run(context.Background(), Opts{Bucket: bucket, Base: base, Want: want, Log: discardLog()}); err != nil {
+		t.Fatal(err)
+	}
+	first := atomic.LoadInt32(&hits)
+
+	// without the flag a sealed URL never changes, so nothing is re-queued
+	res, err := Run(context.Background(), Opts{Bucket: bucket, Base: base, Want: want, Log: discardLog()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Pending != 0 || atomic.LoadInt32(&hits) != first {
+		t.Fatalf("plain rerun refetched: pending=%d hits=%d", res.Pending, atomic.LoadInt32(&hits))
+	}
+
+	// with it, sealed alone comes back, which is what applies a path change
+	res, err = Run(context.Background(), Opts{Bucket: bucket, Base: base, Want: want, RefetchSealed: true, Log: discardLog()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Pending != 1 || res.Fetched != 1 {
+		t.Errorf("res = %+v, want exactly the one sealed image re-fetched", res)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.FromSlash(base), "sealed", "NEO", "111.jpg")); err != nil {
+		t.Errorf("sealed image not stored at the current path: %v", err)
 	}
 }

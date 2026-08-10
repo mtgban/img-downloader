@@ -25,8 +25,10 @@ updating both this tool and the website consumer.
 - Singles object path: the Scryfall URL path with the leading slash
   stripped, e.g. `normal/front/<c1>/<c2>/<scryfallId>.jpg`, where `c1`/`c2`
   are the first two characters of the id.
-- Sealed object path: `<SETCODE>/sealed/<tcgplayerProductId>.jpg` (SETCODE is
-  the uppercase MTGJSON code).
+- Sealed object path: `sealed/<SETCODE>/<tcgplayerProductId>.jpg` (SETCODE is
+  the uppercase MTGJSON code). Sealed sits under one shared prefix so the
+  bucket root holds only the few top level trees rather than a directory per
+  set code.
 - Derived artifacts at the bucket base: `bundles/<SETCODE>-<hash>.zip`,
   `images-manifest.json`, `mirror-state.json`.
 - Manifest JSON: `{"<SETCODE>": {"h": "<fnv64a hex>", "n": <imageCount>, "b": <totalBytes>}}`.
@@ -66,6 +68,10 @@ B2_BUCKET=./tmp-mirror go run ./cmd/imgdl -sets NEO -dry-run
 - `-sets`: comma-separated set codes to mirror; empty means all sets.
 - `-dry-run`: print the fetch plan without fetching or writing anything.
 - `-skip-sealed`: skip the TCGplayer sealed product pass.
+- `-refetch-sealed`: forget every sealed image already mirrored so this run
+  stores them again. Needed only when the sealed object path changes: state
+  keys on the source URL, a sealed URL never changes, so a path change is
+  otherwise invisible to the diff and no run would write the new location.
 
 ### Environment variables
 
@@ -245,6 +251,19 @@ back before the run ends. A host failing every request is broken, not
 authoritative about what it publishes, and since a sealed URL never changes
 there would be nothing to trigger a retry of anything it was wrongly asked
 about during an outage.
+
+## Moving the sealed object path
+
+Changing `SealedObjectPath` alone does nothing. `NeedFetch` compares the
+stored `source` against the wanted URL, and neither moves when only the
+object path does, so a run reports success having written nothing to the new
+location. `-refetch-sealed` is what applies it, by dropping sealed from state
+so the diff re-queues them. At roughly 15k sealed images and the 100ms
+spacing that is about 25 minutes.
+
+Nothing deletes, so the copies at the old path remain until removed by hand.
+The website reads this layout too, so it has to learn the new path before the
+old tree goes away.
 
 ## Sealed images
 
