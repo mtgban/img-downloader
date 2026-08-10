@@ -6,31 +6,31 @@ import (
 	"github.com/mtgban/img-downloader/internal/mirror"
 )
 
-func TestBundleHashDeterministicAndOrderFree(t *testing.T) {
-	a := mirror.BundleHash(map[string]string{"uuid-a": "d1", "uuid-b": "d2"})
-	b := mirror.BundleHash(map[string]string{"uuid-b": "d2", "uuid-a": "d1"})
+func TestSetHashDeterministicAndOrderFree(t *testing.T) {
+	a := mirror.SetHash(map[string]string{"uuid-a": "d1", "uuid-b": "d2"})
+	b := mirror.SetHash(map[string]string{"uuid-b": "d2", "uuid-a": "d1"})
 	if a == "" || a != b {
 		t.Errorf("hash not deterministic: %q vs %q", a, b)
 	}
 }
 
-func TestBundleHashSensitive(t *testing.T) {
+func TestSetHashSensitive(t *testing.T) {
 	base := map[string]string{"uuid-a": "d1", "uuid-b": "d2"}
-	ref := mirror.BundleHash(base)
+	ref := mirror.SetHash(base)
 	for name, m := range map[string]map[string]string{
 		"digest changed": {"uuid-a": "d1x", "uuid-b": "d2"},
 		"uuid changed":   {"uuid-ax": "d1", "uuid-b": "d2"},
 		"member removed": {"uuid-a": "d1"},
 		"member added":   {"uuid-a": "d1", "uuid-b": "d2", "uuid-c": "d3"},
 	} {
-		if mirror.BundleHash(m) == ref {
+		if mirror.SetHash(m) == ref {
 			t.Errorf("%s: hash did not change", name)
 		}
 	}
 }
 
-func TestBundleHashFieldBoundary(t *testing.T) {
-	if mirror.BundleHash(map[string]string{"ab": "c"}) == mirror.BundleHash(map[string]string{"a": "bc"}) {
+func TestSetHashFieldBoundary(t *testing.T) {
+	if mirror.SetHash(map[string]string{"ab": "c"}) == mirror.SetHash(map[string]string{"a": "bc"}) {
 		t.Error("uuid/digest boundary collision")
 	}
 }

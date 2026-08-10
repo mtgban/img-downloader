@@ -42,23 +42,6 @@ func TestSetDigestsSkipsUnfetched(t *testing.T) {
 	}
 }
 
-func TestBundlesToRebuild(t *testing.T) {
-	digests := map[string]map[string]string{
-		"NEO": {"7673784e-db4b-43a1-8d55-1bb9fc1e284f": "d1"},
-		"MID": {"bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd": "d2"},
-		"VOW": {"d27cf7b7-7982-46bd-a559-7789c0e74bae": "d3"},
-	}
-	m := Manifest{
-		"NEO": {Hash: BundleHash(digests["NEO"]), Count: 1, Bytes: 10},
-		"MID": {Hash: "stale", Count: 1, Bytes: 10},
-	}
-	got := BundlesToRebuild(m, digests)
-	want := []string{"MID", "VOW"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("BundlesToRebuild = %v, want %v", got, want)
-	}
-}
-
 func TestDomains(t *testing.T) {
 	_, want := planFixture()
 	got := Domains(want)

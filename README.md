@@ -32,16 +32,18 @@ updating both this tool and the website consumer.
   the uppercase MTGJSON code). Sealed sits under one shared prefix so the
   bucket root holds only the few top level trees rather than a directory per
   set code.
-- Derived artifacts at the bucket base: `bundles/<SETCODE>-<hash>.zip`,
-  `images-manifest.json`, `mirror-state.json`.
+- Derived artifacts at the bucket base: `images-manifest.json`,
+  `mirror-state.json`.
 - Manifest JSON: `{"<SETCODE>": {"h": "<fnv64a hex>", "n": <imageCount>, "b": <totalBytes>}}`.
-- Bundle zip: flat entries named `<imageKey>.jpg`, built deterministically
-  (sorted, `zip.Store`, mtime epoch 0). Image key is the scryfallId for
-  singles, `p-<SETCODE>-<tcgId>` for sealed.
-- Bundle hash: fnv64a hex over sorted `"<key> <sha256hex>\n"` lines.
+- Image key is the scryfallId for singles, `p-<SETCODE>-<tcgId>` for sealed.
+- Set hash: fnv64a hex over sorted `"<key> <sha256hex>\n"` lines. It is the
+  per set version marker clients diff, so it changes when a set gains, loses,
+  or replaces an image, and does not depend on map order.
 - State JSON: `{"<imageKey>": {"digest": "<sha256hex>", "fetchedAt": "RFC3339", "source": "<url>"}}`,
   plus an optional `"missing": true` on entries the source has no image for
   (see below); those carry no digest and are never bundled.
+  `size` is the stored object's length, summed per set into the manifest so a
+  client can size a download before starting one.
   A key is refetched when its stored `source` differs from the currently
   wanted URL. Sealed URLs never change, so sealed images are fetch-once.
   `source` keeps the whole Scryfall URL including its `?<epoch>` query, which
@@ -145,22 +147,10 @@ every 20 seconds at the above rate — so an interrupted run resumes from
 where it left off instead of restarting; rerun the same command and it only
 fetches what is still missing.
 
-The bundle rebuild is the slower half of a first run: each set is rebuilt by
-reading its images back out of the bucket one at a time, so all ~119k reads
-land there. The 2026-08-07 run managed fewer than 50 sets in 31 minutes, the
-alphabetically-first sets being large ones, which puts the full pass in the
-region of four hours on its own. The manifest is therefore snapshotted every
-20 sets, on a context that outlives cancellation, and a cancelled rebuild
-returns immediately instead of walking the remainder failing every read.
-Without both, a run killed at its timeout lost every bundle it had built and
-the phase could never converge across runs however many you ran.
-
-Progress is reported every 30 seconds during the crawl, and every 20 bundles
-during the rebuild:
+Progress is reported every 30 seconds during the crawl:
 
 ```
 fetched 24000/119797 (20%), 412 not published at source
-rebuilt 240/1043 bundles
 ```
 
 Both phases otherwise log only errors, which over a run this long makes a
@@ -169,15 +159,11 @@ elapsed time rather than an image count because the per-image rate differs
 more than threefold between a local run and a CI runner, so a count tuned for
 one is either silent or deafening on the other.
 
-Two costs are specific to the first run. Every set's bundle is rebuilt
-because the manifest starts empty, and a rebuild reads its members back out
-of the bucket, so the run pulls all ~119k images down again (~30 GB of B2
-egress, the billed direction) and uploads a comparable volume of zips. And
-the state document reaches about 30 MB at full scale (~255 bytes per entry),
-rewritten whole on every snapshot — roughly 9 GB of writes across a backfill.
-That is B2 ingress, which is not billed, so it costs throughput rather than
-money. Steady-state daily runs rebuild only the sets that changed and so pay
-neither.
+The state document reaches about 30 MB at full scale (~255 bytes per entry)
+and is rewritten whole on every snapshot, roughly 9 GB of writes across a
+backfill. That is B2 ingress, which is not billed, so it costs throughput
+rather than money. Nothing else is derived: the manifest is computed from
+state in memory, so it costs no reads at all.
 
 ## Interrupts and durability
 
