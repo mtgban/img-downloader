@@ -84,8 +84,8 @@ B2_BUCKET=./tmp-mirror go run ./cmd/imgdl -sets NEO -dry-run
 
 `.github/workflows/mirror.yml` runs the mirror on a daily cron (minute 17
 past midnight UTC, chosen to avoid the top-of-hour scheduling drops GitHub
-documents) and can also be triggered manually via workflow_dispatch with
-`sets` and `dry_run` inputs. It needs two repo secrets:
+documents) and can also be triggered manually via workflow_dispatch with `sets`,
+`dry_run` and `refetch_sealed` inputs. It needs two repo secrets:
 
 - `B2_ACCESS_KEY`
 - `B2_ACCESS_SECRET`
@@ -258,8 +258,10 @@ Changing `SealedObjectPath` alone does nothing. `NeedFetch` compares the
 stored `source` against the wanted URL, and neither moves when only the
 object path does, so a run reports success having written nothing to the new
 location. `-refetch-sealed` is what applies it, by dropping sealed from state
-so the diff re-queues them. At roughly 15k sealed images and the 100ms
-spacing that is about 25 minutes.
+so the diff re-queues them. Run it from the workflow with the
+`refetch_sealed` dispatch input rather than by hand; at roughly 15k sealed
+images and the runner's measured 338ms that is about 85 minutes, well inside
+the job timeout.
 
 Nothing deletes, so the copies at the old path remain until removed by hand.
 The website reads this layout too, so it has to learn the new path before the
