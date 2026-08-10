@@ -22,9 +22,13 @@ deterministic zip and tracking fetch state so reruns only pull what changed.
 This layout is settled with the project owner; do not change it without
 updating both this tool and the website consumer.
 
-- Singles object path: the Scryfall URL path with the leading slash
-  stripped, e.g. `normal/front/<c1>/<c2>/<scryfallId>.jpg`, where `c1`/`c2`
-  are the first two characters of the id.
+- Singles object path: the Scryfall URL path with the leading slash stripped
+  and its size segment replaced, e.g. `singles/front/<c1>/<c2>/<scryfallId>.jpg`,
+  where `c1`/`c2` are the first two characters of the id. Scryfall serves these
+  under `normal/`; the mirror groups by what an image is rather than what size
+  it happens to be, so it pairs with `sealed/`. A source path that does not
+  start with `normal/` is rejected rather than filed under `singles/` as though
+  it belonged there.
 - Sealed object path: `sealed/<SETCODE>/<tcgplayerProductId>.jpg` (SETCODE is
   the uppercase MTGJSON code). Sealed sits under one shared prefix so the
   bucket root holds only the few top level trees rather than a directory per
@@ -251,6 +255,22 @@ back before the run ends. A host failing every request is broken, not
 authoritative about what it publishes, and since a sealed URL never changes
 there would be nothing to trigger a retry of anything it was wrongly asked
 about during an outage.
+
+## Moving the singles object path
+
+Unlike sealed, this one is a plain prefix rename: `normal/...` becomes
+`singles/...` with everything below it unchanged. That makes it a bucket-side
+move rather than a refetch, which matters at ~116k images — re-pulling them
+from Scryfall would take about eleven hours on a runner, for bytes already
+sitting in the bucket.
+
+State never records where an object was put, only its source URL and digest,
+so a move leaves state correct: the next run's diff sees nothing to do, and
+bundle rebuilds read the new location.
+
+Do the move and the deploy close together. In between, a run would still fetch
+nothing, but any set whose bundle needed rebuilding would look for images at
+whichever path the running binary was built with.
 
 ## Moving the sealed object path
 

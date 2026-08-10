@@ -100,7 +100,7 @@ func TestBuildWantSingles(t *testing.T) {
 	wantA := Image{
 		Key:        "id-a",
 		URL:        "https://cards.scryfall.io/normal/front/a/id-a.jpg?1600000000",
-		ObjectPath: "normal/front/a/id-a.jpg",
+		ObjectPath: "singles/front/a/id-a.jpg",
 		SetCode:    "NEO",
 	}
 	if gotA != wantA {
