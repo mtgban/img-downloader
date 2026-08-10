@@ -12,6 +12,10 @@ on:
         description: plan only
         required: false
         default: "false"
+      refetch_sealed:
+        description: re-store every sealed image, for a sealed object path change
+        required: false
+        default: "false"
 concurrency:
   group: mirror
   cancel-in-progress: false
@@ -33,8 +37,10 @@ jobs:
           B2_ACCESS_SECRET: ${{ secrets.B2_ACCESS_SECRET }}
           SETS: ${{ inputs.sets }}
           DRY_RUN: ${{ inputs.dry_run }}
+          REFETCH_SEALED: ${{ inputs.refetch_sealed }}
         run: |
           FLAGS=()
           if [ -n "$SETS" ]; then FLAGS+=(-sets "$SETS"); fi
           if [ "$DRY_RUN" = "true" ]; then FLAGS+=(-dry-run); fi
+          if [ "$REFETCH_SEALED" = "true" ]; then FLAGS+=(-refetch-sealed); fi
           ./imgdl "${FLAGS[@]}"
