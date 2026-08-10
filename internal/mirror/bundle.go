@@ -61,6 +61,12 @@ func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base str
 					return
 				}
 				info, err := rebuildOne(ctx, bucket, base, want, code, setDigests[code])
+				if err != nil {
+					// the closing summary can only name the set, and a set code
+					// on its own cannot tell a missing object from a transient
+					// read. This is the only place the cause still exists.
+					logger.Printf("bundle %s: %v", code, err)
+				}
 
 				mu.Lock()
 				if err != nil {
