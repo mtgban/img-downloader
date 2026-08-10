@@ -63,8 +63,17 @@ func JoinPath(base string, elems ...string) string {
 	return u.String()
 }
 
-// SingleObjectPath is the Scryfall image URL path with the leading slash stripped.
-// Rejects paths that are empty, absolute, or escape the bucket root.
+// Scryfall files images under the size it rendered them at. The mirror groups
+// by what an image is rather than what size it happens to be, so the leading
+// segment is swapped on the way in and singles/ pairs with sealed/.
+const (
+	scryfallNormalDir = "normal/"
+	singlesDir        = "singles/"
+)
+
+// SingleObjectPath is the Scryfall image URL path with the leading slash
+// stripped and its size segment replaced by singles/. Rejects paths that are
+// empty, absolute, escape the bucket root, or are not shaped as expected.
 func SingleObjectPath(sourceURL string) (string, error) {
 	u, err := url.Parse(sourceURL)
 	if err != nil {
@@ -74,7 +83,10 @@ func SingleObjectPath(sourceURL string) (string, error) {
 	if p == "" || path.IsAbs(p) || p == ".." || strings.HasPrefix(p, "../") || path.Clean(p) != p {
 		return "", fmt.Errorf("mirror: unsafe object path %q from source URL", p)
 	}
-	return p, nil
+	if !strings.HasPrefix(p, scryfallNormalDir) {
+		return "", fmt.Errorf("mirror: source path %q does not start with %q", p, scryfallNormalDir)
+	}
+	return singlesDir + strings.TrimPrefix(p, scryfallNormalDir), nil
 }
 
 // SealedObjectPath returns the bucket object path for a sealed product image.
