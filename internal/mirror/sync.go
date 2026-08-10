@@ -17,7 +17,12 @@ type Opts struct {
 	// SkipSealed excludes sealed keys from this run's fetch list, without
 	// dropping them from Want; bundle membership is unaffected.
 	SkipSealed bool
-	Log        *log.Logger
+	// RefetchSealed forgets every sealed image already mirrored so this run
+	// stores them again. A sealed source URL never changes and state keys on
+	// that URL, so moving the sealed object path is otherwise invisible to the
+	// diff and no run would ever write the new location.
+	RefetchSealed bool
+	Log           *log.Logger
 }
 
 // Result reports one pass's work.
@@ -44,6 +49,10 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 	manifest, err := LoadManifest(ctx, opts.Bucket, opts.Base)
 	if err != nil {
 		return res, err
+	}
+
+	if opts.RefetchSealed {
+		logger.Printf("re-mirroring %d sealed images already stored", forgetSealed(state))
 	}
 
 	fetches := NeedFetch(state, opts.Want)
@@ -87,6 +96,19 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 		return res, fetchErr
 	}
 	return res, bundleErr
+}
+
+// forgetSealed drops every sealed entry from state, returning how many, so the
+// diff re-queues them and they land at whatever the current object path is.
+func forgetSealed(state State) int {
+	n := 0
+	for key := range state {
+		if IsSealedKey(key) {
+			delete(state, key)
+			n++
+		}
+	}
+	return n
 }
 
 // dropSealed removes sealed keys from a NeedFetch result in place.
