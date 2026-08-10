@@ -1,6 +1,7 @@
 package mirror
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -271,5 +272,27 @@ func TestRebuildBundlesCancelMidRunSnapshotsCompletedWork(t *testing.T) {
 	}
 	if len(saved) != bundleSaveEvery {
 		t.Errorf("snapshotted manifest has %d sets, want the %d completed before cancellation", len(saved), bundleSaveEvery)
+	}
+}
+
+func TestRebuildBundlesLogsWhyASetFailed(t *testing.T) {
+	base := filepath.ToSlash(t.TempDir())
+	var buf bytes.Buffer
+
+	// NEO wants an image that was never written, the shape a missing object
+	// takes; the summary names only the set, so the cause has to be logged
+	state := State{"card-a": StateEntry{Digest: "d1"}}
+	want := map[string]Image{"card-a": {Key: "card-a", ObjectPath: "gone/card-a.jpg", SetCode: "NEO"}}
+
+	_, err := RebuildBundles(context.Background(), &simplecloud.FileBucket{}, base, state, want,
+		Manifest{}, []string{"NEO"}, log.New(&buf, "", 0))
+	if err == nil {
+		t.Fatal("expected the rebuild to fail")
+	}
+	if !strings.Contains(buf.String(), "bundle NEO:") {
+		t.Errorf("no per-set cause logged, got:\n%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "card-a.jpg") && !strings.Contains(buf.String(), "no such file") {
+		t.Errorf("logged cause names neither the object nor the reason:\n%s", buf.String())
 	}
 }
