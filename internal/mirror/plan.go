@@ -90,18 +90,6 @@ func SetDigests(state State, want map[string]Image) map[string]map[string]string
 	return out
 }
 
-// BundlesToRebuild returns the set codes whose digests no longer match the manifest, sorted.
-func BundlesToRebuild(m Manifest, setDigests map[string]map[string]string) []string {
-	var out []string
-	for code, digests := range setDigests {
-		if m[code].Hash != BundleHash(digests) {
-			out = append(out, code)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
 // Domains counts the wanted image URLs per source host.
 func Domains(want map[string]Image) map[string]int {
 	out := map[string]int{}
