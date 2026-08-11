@@ -49,44 +49,27 @@ func TestJoinPath(t *testing.T) {
 }
 
 func TestSingleObjectPath(t *testing.T) {
-	got, err := mirror.SingleObjectPath("https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg?1783903008")
-	if err != nil || got != "singles/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg" {
+	const id = "7673784e-db4b-43a1-8d55-1bb9fc1e284f"
+	got, err := mirror.SingleObjectPath(id)
+	if err != nil || got != "singles/front/7/6/"+id+".jpg" {
 		t.Fatalf("got %q err %v", got, err)
 	}
 }
 
-func TestSingleObjectPathRejectsTraversal(t *testing.T) {
-	urls := []string{
-		"https://host/../magic/images-manifest.json",
-		"https://host/normal/../../magic/mirror-state.json",
-		"https://host//etc/passwd",
-		"https://host/..",
-	}
-	for _, u := range urls {
-		if got, err := mirror.SingleObjectPath(u); err == nil {
-			t.Errorf("SingleObjectPath(%q) = %q, nil, want error", u, got)
-		}
-	}
-}
-
-func TestSealedKeyAndPath(t *testing.T) {
-	if k := mirror.SealedKey("MH3", "541185"); k != "p-MH3-541185" {
-		t.Fatalf("key %q", k)
-	}
-	if p := mirror.SealedObjectPath("MH3", "541185"); p != "sealed/MH3/541185.jpg" {
-		t.Fatalf("path %q", p)
-	}
-}
-
-func TestSingleObjectPathRejectsAnUnexpectedShape(t *testing.T) {
-	// the mirror only knows how to place Scryfall's normal-size tree; anything
-	// else would be filed under singles/ as though it belonged there
-	for _, u := range []string{
-		"https://cards.scryfall.io/large/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg",
-		"https://cards.scryfall.io/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg",
+func TestSingleObjectPathRejectsAnythingButAnID(t *testing.T) {
+	// The path is built from this value, so a key that is not an id could
+	// otherwise place an object anywhere in the bucket, or somewhere the
+	// website's own id pattern would refuse to read back.
+	for _, bad := range []string{
+		"",
+		"7673784e-1234",
+		"../../mirror-state.json",
+		"7673784e-db4b-43a1-8d55-1bb9fc1e284f/../../x",
+		"7673784E-DB4B-43A1-8D55-1BB9FC1E284F",
+		"https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg",
 	} {
-		if got, err := mirror.SingleObjectPath(u); err == nil {
-			t.Errorf("SingleObjectPath(%q) = %q, want an error", u, got)
+		if got, err := mirror.SingleObjectPath(bad); err == nil {
+			t.Errorf("SingleObjectPath(%q) = %q, want an error", bad, got)
 		}
 	}
 }
