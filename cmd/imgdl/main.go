@@ -1,4 +1,8 @@
-// Command imgdl mirrors Scryfall and MTGJSON sealed images into a bucket.
+// Command imgdl mirrors a card game's card and sealed product images into a bucket.
+//
+// Which game is mirrored, and therefore where its card list and image URLs
+// come from, is chosen with -game. Magic comes from the public MTGJSON and
+// Scryfall bulk exports; every other game comes from mtgban's own datastore.
 package main
 
 import (
@@ -7,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -15,27 +18,58 @@ import (
 	"syscall"
 
 	"github.com/mtgban/img-downloader/internal/mirror"
-	"github.com/mtgban/img-downloader/internal/mtgjson"
-	"github.com/mtgban/img-downloader/internal/scryfall"
+	"github.com/mtgban/img-downloader/internal/source"
+	"github.com/mtgban/img-downloader/internal/source/datastore"
+	"github.com/mtgban/img-downloader/internal/source/magic"
 	"github.com/mtgban/simplecloud"
 )
 
-const allPrintingsURL = "https://mtgjson.com/api/v5/AllPrintings.json.gz"
+// datastoreEnv names the env var locating a non-Magic game's datastore
+// document, the counterpart of the website's datastore_path config key.
+const datastoreEnv = "IMGDL_DATASTORE"
+
+// opts is one invocation's configuration, from flags and the environment.
+type opts struct {
+	game           source.Game
+	bucket         string
+	sets           string
+	dryRun         bool
+	skipSealed     bool
+	retryMissing   bool
+	rebuildBundles bool
+}
 
 func main() {
+	gameFlag := flag.String("game", envOr("IMGDL_GAME", string(source.Magic)),
+		"card game to mirror: "+strings.Join(gameNames(), ", "))
 	setsFlag := flag.String("sets", "", "CSV of set codes to mirror, empty means all sets")
 	dryRun := flag.Bool("dry-run", false, "print the fetch plan without fetching or writing")
-	skipSealed := flag.Bool("skip-sealed", false, "skip the TCGplayer sealed product pass")
+	skipSealed := flag.Bool("skip-sealed", false, "skip the sealed product pass")
 	retryMissing := flag.Bool("retry-missing", false, "ask again for images a source previously answered it had none of")
 	rebuildBundles := flag.Bool("rebuild-bundles", false, "rebuild every set bundle, even where the manifest already lists a current hash")
 	flag.Parse()
+
+	game, err := source.ParseGame(*gameFlag)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	bucketEnv, err := requireBucketEnv()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if err := run(signalContext(), bucketEnv, *setsFlag, *dryRun, *skipSealed, *retryMissing, *rebuildBundles); err != nil {
+	cfg := opts{
+		game:           game,
+		bucket:         bucketEnv,
+		sets:           *setsFlag,
+		dryRun:         *dryRun,
+		skipSealed:     *skipSealed,
+		retryMissing:   *retryMissing,
+		rebuildBundles: *rebuildBundles,
+	}
+
+	if err := run(signalContext(), cfg); err != nil {
 		if errors.Is(err, context.Canceled) {
 			// state is snapshotted as the crawl goes, so a rerun picks up where this left off
 			log.Print("interrupted, progress saved; rerun the same command to resume")
@@ -43,6 +77,23 @@ func main() {
 		}
 		log.Fatal(err)
 	}
+}
+
+// envOr returns the environment value for key, or def when it is unset or empty.
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// gameNames lists the mirrorable games, for the -game flag's help text.
+func gameNames() []string {
+	out := make([]string, 0, len(source.Games()))
+	for _, g := range source.Games() {
+		out = append(out, string(g))
+	}
+	return out
 }
 
 // signalContext returns a context cancelled by the first SIGINT or SIGTERM.
@@ -66,101 +117,84 @@ func requireBucketEnv() (string, error) {
 	return bucket, nil
 }
 
-func run(ctx context.Context, bucketEnv, setsFlag string, dryRun, skipSealed, retryMissing, rebuildBundles bool) error {
-	bucket, base, err := openBucket(ctx, bucketEnv)
+// newProvider returns the want-list provider for game.
+//
+// Magic is the one game built from public bulk data; the rest read their card
+// lists and image URLs from mtgban's own datastore. That datastore is a
+// separate location from the image bucket — it is the site's data, not the
+// mirror's — so it is opened from its own URL rather than resolved under the
+// bucket being written to.
+func newProvider(ctx context.Context, game source.Game) (source.Provider, error) {
+	if game == source.Magic {
+		return &magic.Provider{Log: log.Default()}, nil
+	}
+
+	raw := os.Getenv(datastoreEnv)
+	if raw == "" {
+		return nil, fmt.Errorf("%s is required to mirror %s, e.g. b2://mtgban-datastore/%s/AllPrintings.json.xz or a local file",
+			datastoreEnv, game, game)
+	}
+	bucket, objectPath, err := openBucket(ctx, raw)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", datastoreEnv, err)
+	}
+	return datastore.New(game, datastore.Config{
+		Bucket: bucket,
+		Path:   objectPath,
+		Log:    log.Default(),
+	})
+}
+
+func run(ctx context.Context, cfg opts) error {
+	bucket, base, err := openBucket(ctx, cfg.bucket)
+	if err != nil {
+		return err
+	}
+	log.Printf("mirroring game %s into %s", cfg.game, base)
+
+	// before anything is fetched, so a misdirected run costs nothing
+	if err := mirror.ClaimGame(ctx, bucket, base, string(cfg.game), cfg.dryRun); err != nil {
+		return err
+	}
+
+	provider, err := newProvider(ctx, cfg.game)
 	if err != nil {
 		return err
 	}
 
-	scryURL, err := loadScryfallURLs(ctx)
+	sealed, sealedAware := provider.(source.SealedAware)
+	if !sealedAware && cfg.skipSealed {
+		return fmt.Errorf("-skip-sealed is not applicable to %s, which mirrors no sealed images", cfg.game)
+	}
+
+	want, err := provider.BuildWant(ctx, parseSets(cfg.sets))
 	if err != nil {
 		return err
 	}
+	source.LogWant(log.Default(), cfg.game, want)
 
-	sets, err := loadMTGJSONSets(ctx)
-	if err != nil {
-		return err
+	mirrorOpts := mirror.Opts{
+		Bucket:         bucket,
+		Base:           base,
+		Want:           want,
+		DryRun:         cfg.dryRun,
+		SkipSealed:     cfg.skipSealed,
+		RetryMissing:   cfg.retryMissing,
+		RebuildBundles: cfg.rebuildBundles,
+		Log:            log.Default(),
+	}
+	if sealedAware {
+		mirrorOpts.IsSealedKey = sealed.IsSealedKey
 	}
 
-	want, missing, invalidSealed := mirror.BuildWant(sets, scryURL, parseSets(setsFlag))
-	log.Printf("%d scryfall IDs referenced by mtgjson had no bulk-data match", len(missing))
-	log.Printf("%d sealed refs had an invalid set code or tcgplayer id", invalidSealed)
-
-	opts := mirror.Opts{Bucket: bucket, Base: base, Want: want, DryRun: dryRun, SkipSealed: skipSealed, RetryMissing: retryMissing, RebuildBundles: rebuildBundles, Log: log.Default()}
-	result, runErr := mirror.Run(ctx, opts)
-	fmt.Printf("pending=%d fetched=%d notPublished=%d fetchFailed=%d bundlesRebuilt=%d\n",
-		result.Pending, result.Fetched, result.NotPublished, result.FetchFailed, result.BundlesRebuilt)
+	result, runErr := mirror.Run(ctx, mirrorOpts)
+	fmt.Printf("game=%s pending=%d fetched=%d notPublished=%d fetchFailed=%d bundlesRebuilt=%d\n",
+		cfg.game, result.Pending, result.Fetched, result.NotPublished, result.FetchFailed, result.BundlesRebuilt)
 	if runErr != nil {
 		// exit 1 on a partial fetch; the manifest and state were still saved
 		return runErr
 	}
 	return nil
-}
-
-// loadScryfallURLs resolves the default_cards bulk file and streams it into an id -> front image URL map.
-func loadScryfallURLs(ctx context.Context) (map[string]string, error) {
-	client := scryfall.Client{}
-	uri, err := client.DefaultCardsURI(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", scryfall.UserAgent)
-	req.Header.Set("Accept", "*/*")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("scryfall bulk download: status %d", resp.StatusCode)
-	}
-
-	urls := map[string]string{}
-	err = scryfall.StreamCards(resp.Body, func(c scryfall.BulkCard) error {
-		if u := c.FrontImageURL(); u != "" {
-			urls[c.ID] = u
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, interrupted(ctx, err)
-	}
-	return urls, nil
-}
-
-// interrupted prefers ctx's error over err. Cancelling a stream mid-read leaves
-// the decoder holding a truncated record, so the parse error it reports would
-// otherwise mask the interrupt that caused it.
-func interrupted(ctx context.Context, err error) error {
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return ctxErr
-	}
-	return err
-}
-
-// loadMTGJSONSets fetches and streams AllPrintings.json.gz into a slice of SetImages.
-func loadMTGJSONSets(ctx context.Context) ([]mtgjson.SetImages, error) {
-	rc, err := mtgjson.Fetch(ctx, http.DefaultClient, allPrintingsURL)
-	if err != nil {
-		return nil, err
-	}
-	defer rc.Close()
-
-	var sets []mtgjson.SetImages
-	err = mtgjson.StreamSets(rc, func(s mtgjson.SetImages) error {
-		sets = append(sets, s)
-		return nil
-	})
-	if err != nil {
-		return nil, interrupted(ctx, err)
-	}
-	return sets, nil
 }
 
 // parseSets splits a CSV of set codes into an uppercased filter set, nil when empty.

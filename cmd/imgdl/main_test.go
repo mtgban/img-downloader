@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mtgban/img-downloader/internal/source"
 	"github.com/mtgban/simplecloud"
 )
 
@@ -82,5 +83,53 @@ func TestSignalContextCancelsOnSIGTERM(t *testing.T) {
 	case <-ctx.Done():
 	case <-time.After(10 * time.Second):
 		t.Fatal("signalContext did not cancel on SIGTERM")
+	}
+}
+
+func TestEnvOr(t *testing.T) {
+	t.Setenv("IMGDL_TEST_VAR", "")
+	if got := envOr("IMGDL_TEST_VAR", "fallback"); got != "fallback" {
+		t.Errorf("envOr(unset) = %q, want fallback", got)
+	}
+	t.Setenv("IMGDL_TEST_VAR", "set")
+	if got := envOr("IMGDL_TEST_VAR", "fallback"); got != "set" {
+		t.Errorf("envOr(set) = %q, want set", got)
+	}
+}
+
+// Magic must stay reachable without any new configuration, so the existing
+// scheduled run keeps working after this change with its env untouched.
+func TestNewProviderMagicNeedsNoDatastoreConfig(t *testing.T) {
+	t.Setenv(datastoreEnv, "")
+	p, err := newProvider(context.Background(), source.Magic)
+	if err != nil {
+		t.Fatalf("newProvider(magic) = %v, want success", err)
+	}
+	if p.Game() != source.Magic {
+		t.Errorf("Game() = %q, want magic", p.Game())
+	}
+}
+
+func TestNewProviderDatastoreGameRequiresConfig(t *testing.T) {
+	t.Setenv(datastoreEnv, "")
+	if _, err := newProvider(context.Background(), source.Lorcana); err == nil {
+		t.Fatalf("newProvider(lorcana) without %s = nil error, want an error naming it", datastoreEnv)
+	}
+}
+
+// The datastore document is not opened until BuildWant, so this covers the
+// config plumbing only: that a local path resolves to a provider for the right
+// game rather than being rejected as a bucket URL.
+func TestNewProviderDatastoreGameFromLocalPath(t *testing.T) {
+	t.Setenv(datastoreEnv, "./lorcana-datastore.json.xz")
+	p, err := newProvider(context.Background(), source.Lorcana)
+	if err != nil {
+		t.Fatalf("newProvider(lorcana) = %v, want success", err)
+	}
+	if p.Game() != source.Lorcana {
+		t.Errorf("Game() = %q, want lorcana", p.Game())
+	}
+	if _, ok := p.(source.SealedAware); !ok {
+		t.Error("datastore provider should be sealed aware")
 	}
 }

@@ -1,62 +1,18 @@
 package mirror
 
 import (
-	"fmt"
 	"net/url"
-	"regexp"
 	"sort"
-
-	"github.com/mtgban/img-downloader/internal/mtgjson"
 )
 
-// Image is one wanted mirror entry.
+// Image is one wanted mirror entry. A provider supplies every field: the
+// mirror stores Key in state and the manifest, fetches URL, and writes the
+// bytes to ObjectPath, without knowing which game any of them came from.
 type Image struct {
 	Key        string
 	URL        string
 	ObjectPath string
 	SetCode    string
-}
-
-// sealedKeyPattern mirrors the website's offlineapi sealed key regex.
-var sealedKeyPattern = regexp.MustCompile(`^p-[0-9A-Z]{2,6}-[0-9]+$`)
-
-// BuildWant assembles the wanted image map from mtgjson sets and scryfall URLs.
-// invalidSealed counts sealed refs with a malformed set code or tcgplayer id.
-func BuildWant(sets []mtgjson.SetImages, scryURL map[string]string, setsFilter map[string]bool) (want map[string]Image, missing []string, invalidSealed int) {
-	want = map[string]Image{}
-	for _, s := range sets {
-		if setsFilter != nil && !setsFilter[s.Code] {
-			continue
-		}
-		for _, id := range s.ScryfallIDs {
-			srcURL, ok := scryURL[id]
-			if !ok {
-				missing = append(missing, id)
-				continue
-			}
-			// only well formed scryfall ids become object paths
-			objectPath, err := SingleObjectPath(id)
-			if err != nil {
-				continue
-			}
-			want[id] = Image{Key: id, URL: srcURL, ObjectPath: objectPath, SetCode: s.Code}
-		}
-		for _, sealed := range s.Sealed {
-			key := SealedKey(s.Code, sealed.TcgplayerProductID)
-			if !sealedKeyPattern.MatchString(key) {
-				invalidSealed++
-				continue
-			}
-			want[key] = Image{
-				Key:        key,
-				URL:        fmt.Sprintf("https://product-images.tcgplayer.com/%s.jpg", sealed.TcgplayerProductID),
-				ObjectPath: SealedObjectPath(s.Code, sealed.TcgplayerProductID),
-				SetCode:    s.Code,
-			}
-		}
-	}
-	sort.Strings(missing)
-	return want, missing, invalidSealed
 }
 
 // NeedFetch returns the keys missing from state or whose source URL changed, sorted.
