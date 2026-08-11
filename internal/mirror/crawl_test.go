@@ -91,13 +91,13 @@ func TestFetchOneWritesShardedPathAndState(t *testing.T) {
 	defer srv.Close()
 
 	f := testFetcher(t)
-	img := Image{Key: "7673784e-db4b-43a1-8d55-1bb9fc1e284f", URL: srv.URL, ObjectPath: "singles/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg"}
+	img := Image{Key: "7673784e-db4b-43a1-8d55-1bb9fc1e284f", URL: srv.URL, ObjectPath: "singles/grid/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.webp"}
 
 	if err := f.fetchOne(context.Background(), "test", img); err != nil {
 		t.Fatal(err)
 	}
 
-	stored, err := os.ReadFile(filepath.Join(f.base, "singles", "front", "7", "6", "7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg"))
+	stored, err := os.ReadFile(filepath.Join(f.base, "singles", "grid", "front", "7", "6", "7673784e-db4b-43a1-8d55-1bb9fc1e284f.webp"))
 	if err != nil {
 		t.Fatal(err)
 	}
