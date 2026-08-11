@@ -78,8 +78,8 @@ func gzipLines(t *testing.T, lines []string) []byte {
 
 func TestStreamCards(t *testing.T) {
 	lines := []string{
-		`{"id":"7673784e-db4b-43a1-8d55-1bb9fc1e284f","set":"neo","image_status":"highres_scan","image_uris":{"normal":"https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg"}}`,
-		`{"id":"6904ea20-e504-47da-95a0-08739fdde260","set":"soi","image_status":"highres_scan","card_faces":[{"image_uris":{"normal":"https://cards.scryfall.io/normal/front/6/9/6904ea20-e504-47da-95a0-08739fdde260.jpg"}},{"image_uris":{"normal":"https://cards.scryfall.io/normal/back/6/9/6904ea20-e504-47da-95a0-08739fdde260.jpg"}}]}`,
+		`{"id":"7673784e-db4b-43a1-8d55-1bb9fc1e284f","set":"neo","image_status":"highres_scan","image_uris":{"grid":"https://cards.scryfall.io/grid/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.webp"}}`,
+		`{"id":"6904ea20-e504-47da-95a0-08739fdde260","set":"soi","image_status":"highres_scan","card_faces":[{"image_uris":{"grid":"https://cards.scryfall.io/grid/front/6/9/6904ea20-e504-47da-95a0-08739fdde260.webp"}},{"image_uris":{"grid":"https://cards.scryfall.io/grid/back/6/9/6904ea20-e504-47da-95a0-08739fdde260.webp"}}]}`,
 		`{"id":"cccc3333-0000-0000-0000-000000000003","set":"plst","image_status":"missing"}`,
 	}
 	gz := gzipLines(t, lines)
@@ -99,15 +99,15 @@ func TestStreamCards(t *testing.T) {
 	if id := cards[0].ID; id != "7673784e-db4b-43a1-8d55-1bb9fc1e284f" {
 		t.Errorf("cards[0].ID = %q", id)
 	}
-	if got := cards[0].NormalFrontURL(); got != "https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg" {
-		t.Errorf("cards[0].NormalFrontURL() = %q", got)
+	if got := cards[0].FrontImageURL(); got != "https://cards.scryfall.io/grid/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.webp" {
+		t.Errorf("cards[0].FrontImageURL() = %q", got)
 	}
 
-	if got := cards[1].NormalFrontURL(); got != "https://cards.scryfall.io/normal/front/6/9/6904ea20-e504-47da-95a0-08739fdde260.jpg" {
-		t.Errorf("cards[1].NormalFrontURL() = %q, want front face URL", got)
+	if got := cards[1].FrontImageURL(); got != "https://cards.scryfall.io/grid/front/6/9/6904ea20-e504-47da-95a0-08739fdde260.webp" {
+		t.Errorf("cards[1].FrontImageURL() = %q, want front face URL", got)
 	}
 
-	if got := cards[2].NormalFrontURL(); got != "" {
-		t.Errorf("cards[2].NormalFrontURL() = %q, want empty for missing image_status", got)
+	if got := cards[2].FrontImageURL(); got != "" {
+		t.Errorf("cards[2].FrontImageURL() = %q, want empty for missing image_status", got)
 	}
 }

@@ -73,11 +73,15 @@ var scryfallIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}
 // two characters of its id. Built from the id rather than transformed out of
 // Scryfall's URL, so the layout is the mirror's own rather than a reflection
 // of how Scryfall happens to file things, and pairs with SealedObjectPath.
+//
+// The variant sits above the face so a whole variant is one prefix, droppable
+// or addable without disturbing the rest, and the face is kept so back faces
+// can be mirrored later without moving anything.
 func SingleObjectPath(scryfallID string) (string, error) {
 	if !scryfallIDPattern.MatchString(scryfallID) {
 		return "", fmt.Errorf("mirror: %q is not a scryfall id", scryfallID)
 	}
-	return fmt.Sprintf("singles/front/%s/%s/%s.jpg", scryfallID[0:1], scryfallID[1:2], scryfallID), nil
+	return fmt.Sprintf("singles/grid/front/%s/%s/%s.webp", scryfallID[0:1], scryfallID[1:2], scryfallID), nil
 }
 
 // SealedObjectPath returns the bucket object path for a sealed product image.

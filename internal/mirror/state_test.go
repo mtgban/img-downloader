@@ -22,7 +22,7 @@ func (b errBucket) NewReader(ctx context.Context, path string) (io.ReadCloser, e
 func TestSaveLoadStateRoundTrip(t *testing.T) {
 	base := filepath.ToSlash(t.TempDir())
 	want := mirror.State{
-		"7673784e-db4b-43a1-8d55-1bb9fc1e284f": {Digest: "abc123", FetchedAt: "2026-08-06T00:00:00Z", Source: "https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg"},
+		"7673784e-db4b-43a1-8d55-1bb9fc1e284f": {Digest: "abc123", FetchedAt: "2026-08-06T00:00:00Z", Source: "https://cards.scryfall.io/grid/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.webp"},
 	}
 	if err := mirror.SaveState(context.Background(), &simplecloud.FileBucket{}, base, want); err != nil {
 		t.Fatal(err)
