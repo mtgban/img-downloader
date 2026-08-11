@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"net/url"
 	"path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,30 +64,20 @@ func JoinPath(base string, elems ...string) string {
 	return u.String()
 }
 
-// Scryfall files images under the size it rendered them at. The mirror groups
-// by what an image is rather than what size it happens to be, so the leading
-// segment is swapped on the way in and singles/ pairs with sealed/.
-const (
-	scryfallNormalDir = "normal/"
-	singlesDir        = "singles/"
-)
+// scryfallIDPattern is the key shape this mirror and the website's image
+// handler both agree on. Storing anything else would put an image where
+// nothing can read it back.
+var scryfallIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// SingleObjectPath is the Scryfall image URL path with the leading slash
-// stripped and its size segment replaced by singles/. Rejects paths that are
-// empty, absolute, escape the bucket root, or are not shaped as expected.
-func SingleObjectPath(sourceURL string) (string, error) {
-	u, err := url.Parse(sourceURL)
-	if err != nil {
-		return "", err
+// SingleObjectPath is where a single's image is stored, sharded by the first
+// two characters of its id. Built from the id rather than transformed out of
+// Scryfall's URL, so the layout is the mirror's own rather than a reflection
+// of how Scryfall happens to file things, and pairs with SealedObjectPath.
+func SingleObjectPath(scryfallID string) (string, error) {
+	if !scryfallIDPattern.MatchString(scryfallID) {
+		return "", fmt.Errorf("mirror: %q is not a scryfall id", scryfallID)
 	}
-	p := strings.TrimPrefix(u.Path, "/")
-	if p == "" || path.IsAbs(p) || p == ".." || strings.HasPrefix(p, "../") || path.Clean(p) != p {
-		return "", fmt.Errorf("mirror: unsafe object path %q from source URL", p)
-	}
-	if !strings.HasPrefix(p, scryfallNormalDir) {
-		return "", fmt.Errorf("mirror: source path %q does not start with %q", p, scryfallNormalDir)
-	}
-	return singlesDir + strings.TrimPrefix(p, scryfallNormalDir), nil
+	return fmt.Sprintf("singles/front/%s/%s/%s.jpg", scryfallID[0:1], scryfallID[1:2], scryfallID), nil
 }
 
 // SealedObjectPath returns the bucket object path for a sealed product image.

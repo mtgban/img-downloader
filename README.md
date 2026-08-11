@@ -22,13 +22,12 @@ deterministic zip and tracking fetch state so reruns only pull what changed.
 This layout is settled with the project owner; do not change it without
 updating both this tool and the website consumer.
 
-- Singles object path: the Scryfall URL path with the leading slash stripped
-  and its size segment replaced, e.g. `singles/front/<c1>/<c2>/<scryfallId>.jpg`,
-  where `c1`/`c2` are the first two characters of the id. Scryfall serves these
-  under `normal/`; the mirror groups by what an image is rather than what size
-  it happens to be, so it pairs with `sealed/`. A source path that does not
-  start with `normal/` is rejected rather than filed under `singles/` as though
-  it belonged there.
+- Singles object path: `singles/front/<c1>/<c2>/<scryfallId>.jpg`, where
+  `c1`/`c2` are the first two characters of the id. Built from the id rather
+  than from Scryfall'''s URL, so the layout is the mirror'''s own and pairs with
+  `sealed/`; a key that is not a scryfall id is rejected rather than used to
+  place an object. This happens to match where Scryfall files the same image,
+  under `normal/` instead of `singles/`.
 - Sealed object path: `sealed/<SETCODE>/<tcgplayerProductId>.jpg` (SETCODE is
   the uppercase MTGJSON code). Sealed sits under one shared prefix so the
   bucket root holds only the few top level trees rather than a directory per

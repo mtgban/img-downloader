@@ -78,8 +78,8 @@ func gzipLines(t *testing.T, lines []string) []byte {
 
 func TestStreamCards(t *testing.T) {
 	lines := []string{
-		`{"id":"aaaa1111-0000-0000-0000-000000000001","set":"neo","image_status":"highres_scan","image_uris":{"normal":"https://cards.scryfall.io/normal/front/a/a/aaaa1111.jpg"}}`,
-		`{"id":"bbbb2222-0000-0000-0000-000000000002","set":"soi","image_status":"highres_scan","card_faces":[{"image_uris":{"normal":"https://cards.scryfall.io/normal/front/b/b/bbbb2222.jpg"}},{"image_uris":{"normal":"https://cards.scryfall.io/normal/back/b/b/bbbb2222.jpg"}}]}`,
+		`{"id":"7673784e-db4b-43a1-8d55-1bb9fc1e284f","set":"neo","image_status":"highres_scan","image_uris":{"normal":"https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg"}}`,
+		`{"id":"6904ea20-e504-47da-95a0-08739fdde260","set":"soi","image_status":"highres_scan","card_faces":[{"image_uris":{"normal":"https://cards.scryfall.io/normal/front/6/9/6904ea20-e504-47da-95a0-08739fdde260.jpg"}},{"image_uris":{"normal":"https://cards.scryfall.io/normal/back/6/9/6904ea20-e504-47da-95a0-08739fdde260.jpg"}}]}`,
 		`{"id":"cccc3333-0000-0000-0000-000000000003","set":"plst","image_status":"missing"}`,
 	}
 	gz := gzipLines(t, lines)
@@ -96,14 +96,14 @@ func TestStreamCards(t *testing.T) {
 		t.Fatalf("got %d cards, want 3", len(cards))
 	}
 
-	if id := cards[0].ID; id != "aaaa1111-0000-0000-0000-000000000001" {
+	if id := cards[0].ID; id != "7673784e-db4b-43a1-8d55-1bb9fc1e284f" {
 		t.Errorf("cards[0].ID = %q", id)
 	}
-	if got := cards[0].NormalFrontURL(); got != "https://cards.scryfall.io/normal/front/a/a/aaaa1111.jpg" {
+	if got := cards[0].NormalFrontURL(); got != "https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg" {
 		t.Errorf("cards[0].NormalFrontURL() = %q", got)
 	}
 
-	if got := cards[1].NormalFrontURL(); got != "https://cards.scryfall.io/normal/front/b/b/bbbb2222.jpg" {
+	if got := cards[1].NormalFrontURL(); got != "https://cards.scryfall.io/normal/front/6/9/6904ea20-e504-47da-95a0-08739fdde260.jpg" {
 		t.Errorf("cards[1].NormalFrontURL() = %q, want front face URL", got)
 	}
 

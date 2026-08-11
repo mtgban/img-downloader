@@ -34,8 +34,8 @@ func BuildWant(sets []mtgjson.SetImages, scryURL map[string]string, setsFilter m
 				missing = append(missing, id)
 				continue
 			}
-			// only well formed scryfall URLs become object paths
-			objectPath, err := SingleObjectPath(srcURL)
+			// only well formed scryfall ids become object paths
+			objectPath, err := SingleObjectPath(id)
 			if err != nil {
 				continue
 			}
