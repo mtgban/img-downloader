@@ -49,8 +49,8 @@ func TestJoinPath(t *testing.T) {
 }
 
 func TestSingleObjectPath(t *testing.T) {
-	got, err := mirror.SingleObjectPath("https://cards.scryfall.io/normal/front/7/6/7673784e-1234.jpg?1783903008")
-	if err != nil || got != "singles/front/7/6/7673784e-1234.jpg" {
+	got, err := mirror.SingleObjectPath("https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg?1783903008")
+	if err != nil || got != "singles/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg" {
 		t.Fatalf("got %q err %v", got, err)
 	}
 }
@@ -82,8 +82,8 @@ func TestSingleObjectPathRejectsAnUnexpectedShape(t *testing.T) {
 	// the mirror only knows how to place Scryfall's normal-size tree; anything
 	// else would be filed under singles/ as though it belonged there
 	for _, u := range []string{
-		"https://cards.scryfall.io/large/front/7/6/7673784e-1234.jpg",
-		"https://cards.scryfall.io/7673784e-1234.jpg",
+		"https://cards.scryfall.io/large/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg",
+		"https://cards.scryfall.io/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg",
 	} {
 		if got, err := mirror.SingleObjectPath(u); err == nil {
 			t.Errorf("SingleObjectPath(%q) = %q, want an error", u, got)
