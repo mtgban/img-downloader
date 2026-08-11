@@ -22,7 +22,7 @@ deterministic zip and tracking fetch state so reruns only pull what changed.
 This layout is settled with the project owner; do not change it without
 updating both this tool and the website consumer.
 
-- Singles object path: `singles/front/<c1>/<c2>/<scryfallId>.jpg`, where
+- Singles object path: `singles/grid/front/<c1>/<c2>/<scryfallId>.webp`, where
   `c1`/`c2` are the first two characters of the id. Built from the id rather
   than from Scryfall'''s URL, so the layout is the mirror'''s own and pairs with
   `sealed/`; a key that is not a scryfall id is rejected rather than used to
@@ -52,7 +52,12 @@ updating both this tool and the website consumer.
   that this tracks reprocessing, not relocation: were Scryfall to change the
   path rather than the query, the new object is written correctly but the old
   one is left behind.
-- No backfill marker file. Images are stored as jpg only, no webp, no cwebp.
+- Singles are Scryfall'''s `grid` variant: their own webp encode at the same
+  488x680 as the `normal` jpg, for a little over half the bytes (ARB measured
+  20,967,673 -> 9,534,479, 54.5% smaller). Nothing is transcoded here; it is
+  stored exactly as served. Sealed images stay jpg, being what TCGplayer
+  serves. The variant sits above the face in the path so a whole variant is
+  one prefix, addable or droppable without moving anything else.
 
 ## Usage
 
@@ -302,9 +307,9 @@ handful of overridden cards can end up missing from their set's bundle zip
 as a result. Single-image serving for those cards is unaffected, since it
 looks up the image directly by id rather than through the bundle.
 
-## Future option: webp
+## Future option: other variants
 
-Images are stored as jpg only today (no webp, no cwebp transcoding). Scryfall
-now publishes native webp variants directly, including a `grid` size at
-488x680, so if webp is wanted back later it can be pulled from Scryfall
-without any local transcoding step.
+`image_uris` also carries `display` (672x936 webp, 63 KB for the same card),
+which is 40% more resolution than what is stored today and still smaller than
+the `normal` jpg. Every variant carries the same `?<epoch>`, so switching one
+is a want-list change that the diff picks up on its own.

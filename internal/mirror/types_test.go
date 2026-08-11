@@ -51,7 +51,7 @@ func TestJoinPath(t *testing.T) {
 func TestSingleObjectPath(t *testing.T) {
 	const id = "7673784e-db4b-43a1-8d55-1bb9fc1e284f"
 	got, err := mirror.SingleObjectPath(id)
-	if err != nil || got != "singles/front/7/6/"+id+".jpg" {
+	if err != nil || got != "singles/grid/front/7/6/"+id+".webp" {
 		t.Fatalf("got %q err %v", got, err)
 	}
 }

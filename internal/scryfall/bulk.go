@@ -77,16 +77,22 @@ type BulkCard struct {
 	} `json:"card_faces"`
 }
 
-// NormalFrontURL returns the normal-size front image URL, or "" when unavailable.
-func (c BulkCard) NormalFrontURL() string {
+// imageVariant is the image_uris key mirrored. grid is Scryfall's own webp
+// encode at the same 488x680 as the normal jpg, for a little over half the
+// bytes, and carries the same ?<epoch> so reprocessing is still detectable.
+const imageVariant = "grid"
+
+// FrontImageURL returns the front image URL for the mirrored variant, or ""
+// when unavailable.
+func (c BulkCard) FrontImageURL() string {
 	if c.ImageStatus == "missing" {
 		return ""
 	}
-	if url, ok := c.ImageURIs["normal"]; ok {
+	if url, ok := c.ImageURIs[imageVariant]; ok {
 		return url
 	}
 	if len(c.CardFaces) > 0 {
-		return c.CardFaces[0].ImageURIs["normal"]
+		return c.CardFaces[0].ImageURIs[imageVariant]
 	}
 	return ""
 }
