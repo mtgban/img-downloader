@@ -87,9 +87,9 @@ func buildWantFixture() []mtgjson.SetImages {
 
 func buildWantScryURL() map[string]string {
 	return map[string]string{
-		"7673784e-db4b-43a1-8d55-1bb9fc1e284f": "https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg?1600000000",
-		"bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd": "https://cards.scryfall.io/normal/front/b/d/bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd.jpg?1600000000",
-		"d27cf7b7-7982-46bd-a559-7789c0e74bae": "https://cards.scryfall.io/normal/front/d/2/d27cf7b7-7982-46bd-a559-7789c0e74bae.jpg?1600000000",
+		"7673784e-db4b-43a1-8d55-1bb9fc1e284f": "https://cards.scryfall.io/grid/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.webp?1600000000",
+		"bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd": "https://cards.scryfall.io/grid/front/b/d/bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd.webp?1600000000",
+		"d27cf7b7-7982-46bd-a559-7789c0e74bae": "https://cards.scryfall.io/grid/front/d/2/d27cf7b7-7982-46bd-a559-7789c0e74bae.webp?1600000000",
 	}
 }
 
@@ -99,8 +99,8 @@ func TestBuildWantSingles(t *testing.T) {
 	gotA := want["7673784e-db4b-43a1-8d55-1bb9fc1e284f"]
 	wantA := Image{
 		Key:        "7673784e-db4b-43a1-8d55-1bb9fc1e284f",
-		URL:        "https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg?1600000000",
-		ObjectPath: "singles/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg",
+		URL:        "https://cards.scryfall.io/grid/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.webp?1600000000",
+		ObjectPath: "singles/grid/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.webp",
 		SetCode:    "NEO",
 	}
 	if gotA != wantA {
@@ -148,7 +148,7 @@ func TestBuildWantSkipsInvalidSealed(t *testing.T) {
 		},
 	}
 	scryURL := map[string]string{
-		"7673784e-db4b-43a1-8d55-1bb9fc1e284f": "https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg?1600000000",
+		"7673784e-db4b-43a1-8d55-1bb9fc1e284f": "https://cards.scryfall.io/grid/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.webp?1600000000",
 	}
 
 	want, _, invalidSealed := BuildWant(sets, scryURL, nil)
@@ -182,7 +182,7 @@ func TestBuildWantFilter(t *testing.T) {
 
 func TestBuildWantURLChangeTriggersNeedFetch(t *testing.T) {
 	state := State{
-		"7673784e-db4b-43a1-8d55-1bb9fc1e284f": {Digest: "d1", Source: "https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg?1500000000"},
+		"7673784e-db4b-43a1-8d55-1bb9fc1e284f": {Digest: "d1", Source: "https://cards.scryfall.io/grid/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.webp?1500000000"},
 	}
 	scryURL := buildWantScryURL()
 	want, _, _ := BuildWant(buildWantFixture(), scryURL, map[string]bool{"NEO": true})

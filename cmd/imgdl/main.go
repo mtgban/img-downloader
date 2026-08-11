@@ -96,7 +96,7 @@ func run(ctx context.Context, bucketEnv, setsFlag string, dryRun, skipSealed, re
 	return nil
 }
 
-// loadScryfallURLs resolves the default_cards bulk file and streams it into an id -> normal front URL map.
+// loadScryfallURLs resolves the default_cards bulk file and streams it into an id -> front image URL map.
 func loadScryfallURLs(ctx context.Context) (map[string]string, error) {
 	client := scryfall.Client{}
 	uri, err := client.DefaultCardsURI(ctx)
@@ -122,7 +122,7 @@ func loadScryfallURLs(ctx context.Context) (map[string]string, error) {
 
 	urls := map[string]string{}
 	err = scryfall.StreamCards(resp.Body, func(c scryfall.BulkCard) error {
-		if u := c.NormalFrontURL(); u != "" {
+		if u := c.FrontImageURL(); u != "" {
 			urls[c.ID] = u
 		}
 		return nil
