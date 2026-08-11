@@ -1,26 +1,54 @@
 # img-downloader
 boring name for a complicated setup!
 
-A standalone Go tool that mirrors MTG card and sealed product images (Scryfall
-singles, TCGplayer sealed art) into a B2 bucket, bundling each set into a
-deterministic zip and tracking fetch state so reruns only pull what changed.
+A standalone Go tool that mirrors card and sealed product images into a B2
+bucket, tracking fetch state so reruns only pull what changed.
+
+It mirrors one game per run, chosen with `-game`. Magic is built from the
+public MTGJSON and Scryfall bulk exports; every other game is built from
+mtgban's own datastore, the same document the website loads.
 
 ## What it does
 
-1. Downloads the Scryfall `default_cards` bulk-data file and streams it into
-   an `id -> normal front image URL` map.
-2. Downloads MTGJSON `AllPrintings.json.gz` and streams it into per-set
-   `scryfallId` and sealed `tcgplayerProductId` lists.
-3. Builds a want-list (`internal/mirror.BuildWant`) from the two sources,
-   diffs it against the last saved state, and fetches everything missing or
-   changed.
-4. Writes each image to the bucket, updates `mirror-state.json`, and rebuilds
-   the zip bundle plus manifest entry for any set whose contents changed.
+1. Asks the selected game's provider for a want-list: every image it should
+   hold, as `key -> {source URL, object path, set code}`.
+2. Diffs that against the last saved state and fetches everything missing or
+   whose source URL changed.
+3. Writes each image to the bucket and updates `mirror-state.json` and
+   `images-manifest.json`.
+
+### Providers
+
+- **Magic** (`internal/source/magic`) downloads the Scryfall `default_cards`
+  bulk file into an `id -> front image URL` map and MTGJSON
+  `AllPrintings.json.gz` into per-set `scryfallId` and sealed
+  `tcgplayerProductId` lists, then joins them.
+- **Datastore** (`internal/source/datastore`) reads one game's datastore
+  document with `mtgmatcher.Open` and takes each card's id and its `full`
+  image URL straight from it. Lorcana and Riftbound are wired up. Nothing
+  parses that document by hand, so this tool and the website cannot drift
+  apart on its schema.
+
+Adding a game means writing a `source.Provider` and listing it in
+`source.Games()`; nothing in `internal/mirror` knows which game it is
+mirroring.
 
 ## Bucket layout contract
 
 This layout is settled with the project owner; do not change it without
 updating both this tool and the website consumer.
+
+Each game lives under its own bucket prefix — `b2://mtgban-images/magic`,
+`.../lorcana`, `.../riftbound` — and everything below is relative to that
+prefix. State and the manifest are single documents at the prefix, keyed by
+image key with no record of which game a key came from, so two games sharing a
+prefix would interleave their keys and each run would delete the other's
+entries. `mirror-game.json` at the base records which game owns the prefix and
+a run refuses to write a prefix another game claimed. A prefix with no marker
+is unclaimed, not foreign, so the existing Magic bucket claims itself on its
+next run.
+
+### Magic
 
 - Singles object path: `singles/grid/front/<c1>/<c2>/<scryfallId>.webp`, where
   `c1`/`c2` are the first two characters of the id. Built from the id rather
@@ -59,23 +87,64 @@ updating both this tool and the website consumer.
   serves. The variant sits above the face in the path so a whole variant is
   one prefix, addable or droppable without moving anything else.
 
+### Datastore-backed games (Lorcana, Riftbound)
+
+Same tree shape, different key namespace, because these games' ids are not
+scryfall ids and their images are not Scryfall's webp.
+
+- Image key is the card's own mtgmatcher uuid for singles and `p-<uuid>` for
+  sealed products. The key is the card's id, never the image URL's basename:
+  Magic can use the basename because a Scryfall URL is named for the card,
+  whereas these games' URLs are their CDN's own filenames.
+- Singles object path: `singles/full/front/<c1>/<c2>/<uuid>.<ext>`. `full` is
+  the mtgmatcher `Images` key mirrored, occupying the slot Magic's `grid`
+  does; these games publish one image per card rather than a set of encodes.
+- Sealed object path: `sealed/<c1>/<c2>/<uuid>.<ext>` — sharded on the id, with
+  no per-set directory. Magic's sealed key encodes the set code because its id
+  is a TCGplayer product id, meaningless on its own; a datastore game's product
+  id is already a uuid in the same namespace as its cards, so pairing it with a
+  set code buys nothing and costs the ability to parse the pair back. Lorcana
+  set codes can be a single character and its product ids contain dashes (`1`
+  and `1-600001`), so `p-1-1-600001` has no unambiguous split. Every key is
+  therefore self-describing: a reader derives the object path from the key
+  alone and needs no set code.
+- `<c1>/<c2>` are the first two characters of the id, an id shorter than two
+  characters being left-padded (`7` files under `0/7`) so every game has the
+  same tree depth.
+- `<ext>` is the source URL's own extension, lowercased. The mirror stores the
+  bytes exactly as served and does not transcode, and these CDNs are not
+  obliged to serve webp the way Scryfall does.
+- The set code is still recorded on each image and is what the manifest is
+  keyed by; it is simply not in the object path.
+- A printing's foil and nonfoil variants are separate uuids in mtgmatcher
+  (`460` and `460_f`, `ogn-066-298_nonfoil` and `..._foil`) that share one
+  image. The mirror stores the printing once under its base uuid, so a reader
+  holding a finish uuid trims at the last underscore to find it.
+
 ## Usage
 
 ```
-B2_BUCKET=<b2://bucket/prefix or local-dir> go run ./cmd/imgdl [-sets CSV] [-dry-run] [-skip-sealed]
+B2_BUCKET=<b2://bucket/prefix or local-dir> go run ./cmd/imgdl [-game NAME] [-sets CSV] [-dry-run] [-skip-sealed]
 ```
 
-Example local dev invocation:
+Example local dev invocations:
 
 ```
 B2_BUCKET=./tmp-mirror go run ./cmd/imgdl -sets NEO -dry-run
+
+B2_BUCKET=./tmp-lorcana IMGDL_DATASTORE=./lorcana.json.xz \
+  go run ./cmd/imgdl -game lorcana -dry-run
 ```
 
 ### Flags
 
+- `-game`: which game to mirror — `magic`, `lorcana` or `riftbound`. Defaults
+  to `$IMGDL_GAME`, or `magic`. It selects both the data source and the key
+  namespace, so an unknown value is refused rather than guessed at.
 - `-sets`: comma-separated set codes to mirror; empty means all sets.
 - `-dry-run`: print the fetch plan without fetching or writing anything.
-- `-skip-sealed`: skip the TCGplayer sealed product pass.
+- `-game`: which card game to mirror; also the bucket prefix written to.
+- `-skip-sealed`: skip the sealed product pass.
 - `-retry-missing`: forget the images a source answered it had none of, so
   this run asks again. A not-published marker keys on a URL that never
   changes, so the diff skips it forever; that is right for art nobody ever
@@ -85,26 +154,52 @@ B2_BUCKET=./tmp-mirror go run ./cmd/imgdl -sets NEO -dry-run
   written, so a manifest carried over from a build that stored no bundles
   matches perfectly and the ordinary diff finds no work to do.
 
+Both sealed flags are refused for a game whose provider mirrors no sealed
+images, rather than silently doing nothing.
+
 ### Environment variables
 
 - `B2_BUCKET` (required): destination, either `b2://name/prefix` or a local
-  directory path.
+  directory path. It is the full base for this run, including the game
+  segment; nothing is appended to it.
 - `B2_ACCESS_KEY`, `B2_ACCESS_SECRET`: required when `B2_BUCKET` uses the
   `b2://` scheme. Not read from any config file, env only.
+- `IMGDL_GAME`: default for `-game`.
+- `IMGDL_DATASTORE`: required for every game except Magic. The datastore
+  document to build the want-list from, either `b2://name/path/to/doc.json.xz`
+  or a local file. This is the counterpart of the website's `datastore_path`
+  config key, and it is a separate location from the image bucket: the
+  datastore is the site's data, not the mirror's. `.xz` and `.gz` suffixes are
+  decompressed by simplecloud on the way in. When it names a `b2://` bucket it
+  reuses `B2_ACCESS_KEY`/`B2_ACCESS_SECRET`.
 
 ## GitHub Action
 
 `.github/workflows/mirror.yml` runs the mirror on a daily cron (minute 17
 past midnight UTC, chosen to avoid the top-of-hour scheduling drops GitHub
-documents) and can also be triggered manually via workflow_dispatch with `sets`,
-`dry_run`, `retry_missing` and `rebuild_bundles` inputs. It needs two repo secrets:
+documents) and can also be triggered manually via workflow_dispatch with
+`game`, `sets`, `dry_run`, `retry_missing` and `rebuild_bundles` inputs. It
+needs two repo secrets:
 
 - `B2_ACCESS_KEY`
 - `B2_ACCESS_SECRET`
 
-`B2_BUCKET` defaults to `b2://mtgban-images/magic` but is overridden by an
-org or repo-level Actions variable of the same name if one is set; org-level
-variables and secrets are picked up automatically, no workflow edits needed.
+The cron fires with `game` unset, which means Magic — the scheduled run is
+unchanged. Concurrency is grouped per game, since two games write different
+prefixes and do not conflict, while two runs of one game would fight over its
+state document.
+
+`B2_BUCKET` is derived as `$B2_BUCKET_ROOT/<game>`, with `B2_BUCKET_ROOT`
+defaulting to `b2://mtgban-images`. An existing `B2_BUCKET` Actions variable
+still wins outright, so a deployment that already sets one keeps exactly the
+base it has today; org-level variables and secrets are picked up
+automatically, no workflow edits needed. Pointing that override at one game's
+prefix and then dispatching another game fails on the `mirror-game.json`
+claim rather than corrupting either mirror.
+
+Mirroring a game other than Magic also needs `IMGDL_DATASTORE` for that game,
+which the workflow does not yet set — see the open cross-repo questions
+below.
 
 The job's `timeout-minutes` is 350, just under the 360 minute ceiling GitHub
 enforces on hosted runners. Steady-state daily runs finish in minutes. The
@@ -304,3 +399,55 @@ looks up the image directly by id rather than through the bundle.
 which is 40% more resolution than what is stored today and still smaller than
 the `normal` jpg. Every variant carries the same `?<epoch>`, so switching one
 is a want-list change that the diff picks up on its own.
+
+## Open cross-repo question: serving non-Magic images
+
+The write side is only half of this. The website serves mirrored images from
+`internal/offlineapi/images.go` (on its unmerged `offline-mode` branch), and
+that handler cannot serve a non-Magic image today. Nothing here changes the
+Magic path it already serves, but the datastore-backed games need a decision
+on the read side before their images are reachable. Three things block them:
+
+1. **Key validation.** `serveImage` gates `.webp` requests on
+   `^[0-9a-f]{8}-...$` and `.jpg` requests on `^p-([0-9A-Z]{2,6})-([0-9]+)$`.
+   A Lorcana uuid (`460`) or a Riftbound one (`ogn-066-298`) matches neither,
+   so the request 404s before the bucket is touched.
+2. **Extension as discriminator.** The handler treats `.webp` as "single" and
+   `.jpg` as "sealed". That holds only because Magic's singles are always
+   Scryfall webp and its sealed always TCGplayer jpg. These games serve
+   whatever their CDN serves, so the two axes have to come apart: the `p-`
+   prefix already determines singles-vs-sealed on its own, and the extension
+   should just be the stored object's.
+3. **`catalog.go`'s `imageKey`.** It derives the key as
+   `path.Base(co.Images["full"])` minus `.jpg`. For Magic that happens to
+   yield the scryfallId, because a Scryfall URL is named for the card. For
+   these games it yields a CDN filename that names nothing — so the catalog
+   would advertise a key the mirror never wrote, and the client would request
+   an image that 404s forever. It validates nothing, so this fails silently.
+
+**What this PR assumes, and why.** The mirror keys non-Magic images by the
+card's own mtgmatcher uuid and derives every object path from the key alone
+(see the layout contract above). That keeps one route, one bucket layout and
+one path builder for all games, and confines the website's change to
+validation: relax the single-key pattern per game, split the extension from
+the singles/sealed decision, and switch `imageKey` to `co.UUID` for non-Magic
+games. `images_path` is already per-deployment config, so each game's prefix
+needs no new plumbing there.
+
+The alternative considered was keying non-Magic singles by the image URL's
+basename, which would leave `imageKey` untouched. It was rejected because the
+key would then be a property of whatever URL the CDN currently serves rather
+than of the card: a CDN reshuffle would re-key the entire mirror, and nothing
+else in the system could name an image without first knowing its URL.
+
+Two smaller things worth deciding at the same time:
+
+- The handler indexes `key[0:1]` and `key[1:2]` after matching. Any relaxed
+  pattern that admits a one-character key panics there unless it pads the
+  same way `mirror.shard` does.
+- Lorcana set codes can be a single character (`1`), so the manifest's set
+  keys are not `^[0-9A-Z]{2,6}$` either. That is only a manifest concern here,
+  since no non-Magic object path contains a set code.
+
+None of this is settled — it is a cross-repo contract, and this PR implements
+the mirror side of one proposal rather than declaring it decided.

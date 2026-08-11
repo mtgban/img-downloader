@@ -28,7 +28,22 @@ type Opts struct {
 	// changes, so the diff skips it forever; that is right for art nobody ever
 	// published and wrong the day the source finally publishes it.
 	RetryMissing bool
-	Log          *log.Logger
+	// IsSealedKey reports whether a key names a sealed product image, for
+	// SkipSealed. It comes from the provider, because what counts as sealed is
+	// the game's business rather than the mirror's; nil means the Magic
+	// p-<SETCODE>-<tcgId> shape, which is what every existing state document
+	// uses.
+	IsSealedKey func(key string) bool
+	Log         *log.Logger
+}
+
+// sealedPredicate returns the configured sealed-key test, defaulting to the
+// Magic key shape.
+func (o Opts) sealedPredicate() func(string) bool {
+	if o.IsSealedKey != nil {
+		return o.IsSealedKey
+	}
+	return IsSealedKey
 }
 
 // Result reports one pass's work.
@@ -57,13 +72,14 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 		return res, err
 	}
 
+	isSealed := opts.sealedPredicate()
 	if opts.RetryMissing {
 		logger.Printf("re-asking for %d images previously not published at source", forgetMissing(state))
 	}
 
 	fetches := NeedFetch(state, opts.Want)
 	if opts.SkipSealed {
-		fetches = dropSealed(fetches)
+		fetches = dropSealed(fetches, isSealed)
 	}
 	res.Pending = len(fetches)
 	logger.Printf("%d images to fetch, %d wanted", len(fetches), len(opts.Want))
@@ -125,10 +141,10 @@ func forgetMissing(state State) int {
 }
 
 // dropSealed removes sealed keys from a NeedFetch result in place.
-func dropSealed(keys []string) []string {
+func dropSealed(keys []string, isSealed func(string) bool) []string {
 	out := keys[:0]
 	for _, k := range keys {
-		if !IsSealedKey(k) {
+		if !isSealed(k) {
 			out = append(out, k)
 		}
 	}

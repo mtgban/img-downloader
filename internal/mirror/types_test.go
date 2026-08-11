@@ -73,3 +73,68 @@ func TestSingleObjectPathRejectsAnythingButAnID(t *testing.T) {
 		}
 	}
 }
+
+func TestGameSingleObjectPath(t *testing.T) {
+	for _, tt := range []struct{ id, ext, want string }{
+		// Riftbound ids carry dashes, Lorcana's are short integers
+		{"ogn-066-298", "jpg", "singles/full/front/o/g/ogn-066-298.jpg"},
+		{"460", "png", "singles/full/front/4/6/460.png"},
+		// a one character id still has to fill both shard levels
+		{"7", "png", "singles/full/front/0/7/7.png"},
+	} {
+		got, err := mirror.GameSingleObjectPath(tt.id, "full", tt.ext)
+		if err != nil || got != tt.want {
+			t.Errorf("GameSingleObjectPath(%q, full, %q) = %q, %v; want %q", tt.id, tt.ext, got, err, tt.want)
+		}
+	}
+}
+
+// Same reasoning as the Magic guard: the id becomes a path segment, so an id
+// that is not a plain token could place an object anywhere in the bucket.
+func TestGameObjectPathsRejectUnsafeSegments(t *testing.T) {
+	for _, bad := range []string{"", ".", "..", "../../mirror-state.json", "a/b", ".hidden", "a b"} {
+		if got, err := mirror.GameSingleObjectPath(bad, "full", "png"); err == nil {
+			t.Errorf("GameSingleObjectPath(%q) = %q, want an error", bad, got)
+		}
+		if got, err := mirror.GameSealedObjectPath(bad, "jpg"); err == nil {
+			t.Errorf("GameSealedObjectPath(%q) = %q, want an error", bad, got)
+		}
+	}
+	// the variant and extension are interpolated too
+	if _, err := mirror.GameSingleObjectPath("460", "../x", "png"); err == nil {
+		t.Error("GameSingleObjectPath with a traversing variant = nil error, want an error")
+	}
+	if _, err := mirror.GameSingleObjectPath("460", "full", "png/../.."); err == nil {
+		t.Error("GameSingleObjectPath with a traversing extension = nil error, want an error")
+	}
+}
+
+func TestGameSealedObjectPathAndKey(t *testing.T) {
+	got, err := mirror.GameSealedObjectPath("ogn-600001", "jpg")
+	if err != nil || got != "sealed/o/g/ogn-600001.jpg" {
+		t.Errorf("GameSealedObjectPath = %q, %v", got, err)
+	}
+	key := mirror.GameSealedKey("ogn-600001")
+	if key != "p-ogn-600001" {
+		t.Errorf("GameSealedKey = %q", key)
+	}
+	if !mirror.IsSealedKey(key) {
+		t.Error("GameSealedKey did not produce a key IsSealedKey recognises")
+	}
+}
+
+// The Magic layout is a settled contract with the website and an existing
+// 120k image bucket; the generalisation must not have moved it.
+func TestMagicObjectPathsUnchanged(t *testing.T) {
+	const id = "7673784e-db4b-43a1-8d55-1bb9fc1e284f"
+	got, err := mirror.SingleObjectPath(id)
+	if err != nil || got != "singles/grid/front/7/6/"+id+".webp" {
+		t.Errorf("SingleObjectPath = %q, %v", got, err)
+	}
+	if p := mirror.SealedObjectPath("NEO", "111"); p != "sealed/NEO/111.jpg" {
+		t.Errorf("SealedObjectPath = %q", p)
+	}
+	if k := mirror.SealedKey("NEO", "111"); k != "p-NEO-111" {
+		t.Errorf("SealedKey = %q", k)
+	}
+}
