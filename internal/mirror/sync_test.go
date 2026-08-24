@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -184,11 +185,17 @@ func TestRunInterruptSkipsBundlesButPersistsState(t *testing.T) {
 	}
 }
 
-func TestRunRefetchSealedRestoresThemAtTheCurrentPath(t *testing.T) {
+func TestRunRetryMissingAsksAgainForUnpublishedImages(t *testing.T) {
+	var published atomic.Bool
 	var hits int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&hits, 1)
-		w.Write([]byte("sealed-bytes"))
+		// the source has no art for this product yet, then later it does
+		if strings.HasSuffix(r.URL.Path, "/111.jpg") && !published.Load() {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write([]byte("image-bytes"))
 	}))
 	defer srv.Close()
 
@@ -199,29 +206,34 @@ func TestRunRefetchSealedRestoresThemAtTheCurrentPath(t *testing.T) {
 		"card-a":    {Key: "card-a", URL: srv.URL + "/a.jpg", ObjectPath: "a/card-a.jpg", SetCode: "NEO"},
 	}
 
-	if _, err := Run(context.Background(), Opts{Bucket: bucket, Base: base, Want: want, Log: discardLog()}); err != nil {
-		t.Fatal(err)
-	}
-	first := atomic.LoadInt32(&hits)
-
-	// without the flag a sealed URL never changes, so nothing is re-queued
 	res, err := Run(context.Background(), Opts{Bucket: bucket, Base: base, Want: want, Log: discardLog()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Pending != 0 || atomic.LoadInt32(&hits) != first {
-		t.Fatalf("plain rerun refetched: pending=%d hits=%d", res.Pending, atomic.LoadInt32(&hits))
+	if res.NotPublished != 1 {
+		t.Fatalf("res = %+v, want the one unpublished image marked", res)
 	}
 
-	// with it, sealed alone comes back, which is what applies a path change
-	res, err = Run(context.Background(), Opts{Bucket: bucket, Base: base, Want: want, RefetchSealed: true, Log: discardLog()})
+	// The source now has the art, but the marker keys on a URL that never
+	// changed, so an ordinary rerun will not look again.
+	published.Store(true)
+	before := atomic.LoadInt32(&hits)
+	res, err = Run(context.Background(), Opts{Bucket: bucket, Base: base, Want: want, Log: discardLog()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Pending != 1 || res.Fetched != 1 {
-		t.Errorf("res = %+v, want exactly the one sealed image re-fetched", res)
+	if res.Pending != 0 || atomic.LoadInt32(&hits) != before {
+		t.Fatalf("plain rerun asked again: pending=%d hits=%d", res.Pending, atomic.LoadInt32(&hits))
+	}
+
+	res, err = Run(context.Background(), Opts{Bucket: bucket, Base: base, Want: want, RetryMissing: true, Log: discardLog()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Pending != 1 || res.Fetched != 1 || res.NotPublished != 0 {
+		t.Errorf("res = %+v, want exactly the one previously-missing image fetched", res)
 	}
 	if _, err := os.Stat(filepath.Join(filepath.FromSlash(base), "sealed", "NEO", "111.jpg")); err != nil {
-		t.Errorf("sealed image not stored at the current path: %v", err)
+		t.Errorf("image not stored once the source published it: %v", err)
 	}
 }

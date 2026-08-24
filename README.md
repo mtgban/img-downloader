@@ -76,10 +76,14 @@ B2_BUCKET=./tmp-mirror go run ./cmd/imgdl -sets NEO -dry-run
 - `-sets`: comma-separated set codes to mirror; empty means all sets.
 - `-dry-run`: print the fetch plan without fetching or writing anything.
 - `-skip-sealed`: skip the TCGplayer sealed product pass.
-- `-refetch-sealed`: forget every sealed image already mirrored so this run
-  stores them again. Needed only when the sealed object path changes: state
-  keys on the source URL, a sealed URL never changes, so a path change is
-  otherwise invisible to the diff and no run would write the new location.
+- `-retry-missing`: forget the images a source answered it had none of, so
+  this run asks again. A not-published marker keys on a URL that never
+  changes, so the diff skips it forever; that is right for art nobody ever
+  published and wrong the day the source finally publishes it.
+- `-rebuild-bundles`: rebuild every set's bundle, disregarding the manifest.
+  The manifest records what a bundle would contain, not that the object was
+  written, so a manifest carried over from a build that stored no bundles
+  matches perfectly and the ordinary diff finds no work to do.
 
 ### Environment variables
 
@@ -93,7 +97,7 @@ B2_BUCKET=./tmp-mirror go run ./cmd/imgdl -sets NEO -dry-run
 `.github/workflows/mirror.yml` runs the mirror on a daily cron (minute 17
 past midnight UTC, chosen to avoid the top-of-hour scheduling drops GitHub
 documents) and can also be triggered manually via workflow_dispatch with `sets`,
-`dry_run` and `refetch_sealed` inputs. It needs two repo secrets:
+`dry_run`, `retry_missing` and `rebuild_bundles` inputs. It needs two repo secrets:
 
 - `B2_ACCESS_KEY`
 - `B2_ACCESS_SECRET`
@@ -252,7 +256,9 @@ coming. They are logged as a count rather than a line each, are reported as
 The marker is keyed on the source URL like any other entry, so it is not
 permanent in the wrong way: if the URL changes — a Scryfall reprocess bumping
 its `?<epoch>` — the image is fetched again. Sealed URLs never change, so a
-sealed product TCGplayer never published stays retired.
+sealed product TCGplayer never published stays retired until `-retry-missing`
+drops the marker and the diff asks again, which is what to run if a source
+publishes art it previously lacked.
 
 Markers written during a streak that goes on to trip the breaker are taken
 back before the run ends. A host failing every request is broken, not
@@ -275,21 +281,6 @@ bundle rebuilds read the new location.
 Do the move and the deploy close together. In between, a run would still fetch
 nothing, but any set whose bundle needed rebuilding would look for images at
 whichever path the running binary was built with.
-
-## Moving the sealed object path
-
-Changing `SealedObjectPath` alone does nothing. `NeedFetch` compares the
-stored `source` against the wanted URL, and neither moves when only the
-object path does, so a run reports success having written nothing to the new
-location. `-refetch-sealed` is what applies it, by dropping sealed from state
-so the diff re-queues them. Run it from the workflow with the
-`refetch_sealed` dispatch input rather than by hand; at roughly 15k sealed
-images and the runner's measured 338ms that is about 85 minutes, well inside
-the job timeout.
-
-Nothing deletes, so the copies at the old path remain until removed by hand.
-The website reads this layout too, so it has to learn the new path before the
-old tree goes away.
 
 ## Sealed images
 

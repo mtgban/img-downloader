@@ -26,7 +26,7 @@ func main() {
 	setsFlag := flag.String("sets", "", "CSV of set codes to mirror, empty means all sets")
 	dryRun := flag.Bool("dry-run", false, "print the fetch plan without fetching or writing")
 	skipSealed := flag.Bool("skip-sealed", false, "skip the TCGplayer sealed product pass")
-	refetchSealed := flag.Bool("refetch-sealed", false, "re-store every sealed image, for applying a sealed object path change")
+	retryMissing := flag.Bool("retry-missing", false, "ask again for images a source previously answered it had none of")
 	rebuildBundles := flag.Bool("rebuild-bundles", false, "rebuild every set bundle, even where the manifest already lists a current hash")
 	flag.Parse()
 
@@ -35,7 +35,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := run(signalContext(), bucketEnv, *setsFlag, *dryRun, *skipSealed, *refetchSealed, *rebuildBundles); err != nil {
+	if err := run(signalContext(), bucketEnv, *setsFlag, *dryRun, *skipSealed, *retryMissing, *rebuildBundles); err != nil {
 		if errors.Is(err, context.Canceled) {
 			// state is snapshotted as the crawl goes, so a rerun picks up where this left off
 			log.Print("interrupted, progress saved; rerun the same command to resume")
@@ -66,7 +66,7 @@ func requireBucketEnv() (string, error) {
 	return bucket, nil
 }
 
-func run(ctx context.Context, bucketEnv, setsFlag string, dryRun, skipSealed, refetchSealed, rebuildBundles bool) error {
+func run(ctx context.Context, bucketEnv, setsFlag string, dryRun, skipSealed, retryMissing, rebuildBundles bool) error {
 	bucket, base, err := openBucket(ctx, bucketEnv)
 	if err != nil {
 		return err
@@ -86,7 +86,7 @@ func run(ctx context.Context, bucketEnv, setsFlag string, dryRun, skipSealed, re
 	log.Printf("%d scryfall IDs referenced by mtgjson had no bulk-data match", len(missing))
 	log.Printf("%d sealed refs had an invalid set code or tcgplayer id", invalidSealed)
 
-	opts := mirror.Opts{Bucket: bucket, Base: base, Want: want, DryRun: dryRun, SkipSealed: skipSealed, RefetchSealed: refetchSealed, RebuildBundles: rebuildBundles, Log: log.Default()}
+	opts := mirror.Opts{Bucket: bucket, Base: base, Want: want, DryRun: dryRun, SkipSealed: skipSealed, RetryMissing: retryMissing, RebuildBundles: rebuildBundles, Log: log.Default()}
 	result, runErr := mirror.Run(ctx, opts)
 	fmt.Printf("pending=%d fetched=%d notPublished=%d fetchFailed=%d bundlesRebuilt=%d\n",
 		result.Pending, result.Fetched, result.NotPublished, result.FetchFailed, result.BundlesRebuilt)
