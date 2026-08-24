@@ -125,3 +125,13 @@ func NotPublishedCount(state State, want map[string]Image) int {
 	}
 	return n
 }
+
+// AllSetCodes returns every set code present in a digest map, sorted.
+func AllSetCodes(setDigests map[string]map[string]string) []string {
+	out := make([]string, 0, len(setDigests))
+	for code := range setDigests {
+		out = append(out, code)
+	}
+	sort.Strings(out)
+	return out
+}

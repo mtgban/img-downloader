@@ -16,6 +16,10 @@ on:
         description: re-store every sealed image, for a sealed object path change
         required: false
         default: "false"
+      rebuild_bundles:
+        description: rebuild every set bundle, ignoring the manifest
+        required: false
+        default: "false"
 concurrency:
   group: mirror
   cancel-in-progress: false
@@ -38,9 +42,11 @@ jobs:
           SETS: ${{ inputs.sets }}
           DRY_RUN: ${{ inputs.dry_run }}
           REFETCH_SEALED: ${{ inputs.refetch_sealed }}
+          REBUILD_BUNDLES: ${{ inputs.rebuild_bundles }}
         run: |
           FLAGS=()
           if [ -n "$SETS" ]; then FLAGS+=(-sets "$SETS"); fi
           if [ "$DRY_RUN" = "true" ]; then FLAGS+=(-dry-run); fi
           if [ "$REFETCH_SEALED" = "true" ]; then FLAGS+=(-refetch-sealed); fi
+          if [ "$REBUILD_BUNDLES" = "true" ]; then FLAGS+=(-rebuild-bundles); fi
           ./imgdl "${FLAGS[@]}"
