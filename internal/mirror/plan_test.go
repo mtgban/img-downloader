@@ -198,3 +198,25 @@ func TestBuildWantURLChangeTriggersNeedFetch(t *testing.T) {
 		t.Errorf("NeedFetch = %v, want 7673784e-db4b-43a1-8d55-1bb9fc1e284f present after URL timestamp change", got)
 	}
 }
+
+// The manifest records what a bundle would contain, not that the object was
+// ever stored. A manifest written by a build that was not producing bundles
+// lists hashes that match perfectly, so the ordinary diff finds no work and a
+// run stores nothing at all, without saying so.
+func TestAMatchingManifestHidesMissingBundles(t *testing.T) {
+	digests := map[string]map[string]string{
+		"NEO": {"card-a": "d1"},
+		"MID": {"card-b": "d2"},
+	}
+	current := Manifest{
+		"NEO": {Hash: BundleHash(digests["NEO"])},
+		"MID": {Hash: BundleHash(digests["MID"])},
+	}
+	if got := BundlesToRebuild(current, digests); len(got) != 0 {
+		t.Fatalf("BundlesToRebuild = %v, want none; the trap is that this is empty", got)
+	}
+	// which is why a run has to be able to disregard the manifest entirely
+	if got := AllSetCodes(digests); len(got) != 2 || got[0] != "MID" || got[1] != "NEO" {
+		t.Errorf("AllSetCodes = %v, want every set sorted", got)
+	}
+}

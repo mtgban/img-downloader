@@ -17,6 +17,12 @@ type Opts struct {
 	// SkipSealed excludes sealed keys from this run's fetch list, without
 	// dropping them from Want; bundle membership is unaffected.
 	SkipSealed bool
+	// RebuildBundles rebuilds every set's bundle regardless of what the
+	// manifest says is current. The manifest records what a bundle would
+	// contain, not that the object exists, so a manifest written while nothing
+	// was building bundles describes bundles that were never stored; the diff
+	// then finds nothing to do and the run is a silent no-op.
+	RebuildBundles bool
 	// RefetchSealed forgets every sealed image already mirrored so this run
 	// stores them again. A sealed source URL never changes and state keys on
 	// that URL, so moving the sealed object path is otherwise invisible to the
@@ -78,7 +84,14 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 	if ctx.Err() != nil || errors.Is(fetchErr, ErrTooManyFailures) {
 		logger.Printf("run stopped early, skipping bundle rebuild")
 	} else {
-		codes := BundlesToRebuild(manifest, SetDigests(state, opts.Want))
+		digests := SetDigests(state, opts.Want)
+		var codes []string
+		if opts.RebuildBundles {
+			codes = AllSetCodes(digests)
+			logger.Printf("rebuilding every bundle: %d sets", len(codes))
+		} else {
+			codes = BundlesToRebuild(manifest, digests)
+		}
 		res.BundlesRebuilt, bundleErr = RebuildBundles(ctx, opts.Bucket, opts.Base, state, opts.Want, manifest, codes, logger)
 	}
 
