@@ -262,7 +262,6 @@ func (f *fetcher) fetchOne(ctx context.Context, host string, img Image) error {
 		Digest:    digest,
 		FetchedAt: time.Now().UTC().Format(time.RFC3339),
 		Source:    img.URL,
-		Size:      int64(len(data)),
 	}
 
 	f.mu.Lock()

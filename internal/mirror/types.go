@@ -30,19 +30,14 @@ type StateEntry struct {
 	Digest    string `json:"digest"`
 	FetchedAt string `json:"fetchedAt"`
 	Source    string `json:"source"`
-	// Size is the stored object's length. The manifest reports it per set so
-	// a client can size a download before starting one.
-	Size    int64 `json:"size,omitempty"`
-	Missing bool  `json:"missing,omitempty"`
+	Missing   bool   `json:"missing,omitempty"`
 }
 
 // State is the mirror-state.json document, keyed by image key.
 type State map[string]StateEntry
 
-// SetHash hashes sorted "key digest" lines with fnv64a, hex encoded. It is the
-// per set version marker clients diff against, so it must change when a set
-// gains, loses, or replaces an image, and must not depend on map order.
-func SetHash(digests map[string]string) string {
+// BundleHash hashes sorted "key digest" lines with fnv64a, hex encoded.
+func BundleHash(digests map[string]string) string {
 	keys := make([]string, 0, len(digests))
 	for k := range digests {
 		keys = append(keys, k)

@@ -34,7 +34,7 @@ func TestRunEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Pending != 2 || res.Fetched != 2 || res.FetchFailed != 0 || res.SetsInManifest != 2 {
+	if res.Pending != 2 || res.Fetched != 2 || res.FetchFailed != 0 || res.BundlesRebuilt != 2 {
 		t.Errorf("first run res = %+v", res)
 	}
 	manifest, err := LoadManifest(context.Background(), bucket, base)
@@ -50,8 +50,8 @@ func TestRunEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res2.Pending != 0 || res2.Fetched != 0 || res2.FetchFailed != 0 || res2.SetsInManifest != 2 {
-		t.Errorf("second run res = %+v, want nothing pending and both sets still described", res2)
+	if res2.Pending != 0 || res2.Fetched != 0 || res2.FetchFailed != 0 || res2.BundlesRebuilt != 0 {
+		t.Errorf("second run res = %+v, want all zero", res2)
 	}
 
 	// bump the source URL for card-a only: refetch and rebuild just NEO.
@@ -63,8 +63,8 @@ func TestRunEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res3.Pending != 1 || res3.Fetched != 1 || res3.FetchFailed != 0 || res3.SetsInManifest != 2 {
-		t.Errorf("third run res = %+v, want pending=1 fetched=1", res3)
+	if res3.Pending != 1 || res3.Fetched != 1 || res3.FetchFailed != 0 || res3.BundlesRebuilt != 1 {
+		t.Errorf("third run res = %+v, want pending=1 fetched=1 rebuilt=1", res3)
 	}
 }
 
@@ -120,7 +120,7 @@ func TestRunSkipSealedDoesNotFetchButKeepsBundle(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantDigests := map[string]string{"card-a": finalState["card-a"].Digest, "p-NEO-111": finalState["p-NEO-111"].Digest}
-	if manifest["NEO"].Hash != SetHash(wantDigests) {
+	if manifest["NEO"].Hash != BundleHash(wantDigests) {
 		t.Errorf("manifest NEO = %+v, sealed entry missing from bundle digests", manifest["NEO"])
 	}
 }
@@ -136,7 +136,7 @@ func TestRunDryRunPlansWithoutWriting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Pending != 1 || res.Fetched != 0 || res.SetsInManifest != 0 {
+	if res.Pending != 1 || res.Fetched != 0 || res.BundlesRebuilt != 0 {
 		t.Errorf("dry run res = %+v, want pending=1 and no writes", res)
 	}
 	if _, err := os.Stat(filepath.Join(filepath.FromSlash(base), "mirror-state.json")); !os.IsNotExist(err) {
@@ -170,10 +170,8 @@ func TestRunInterruptSkipsBundlesButPersistsState(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
-	// the manifest describes what was actually stored, so an interrupted run
-	// still yields a coherent one rather than none at all
-	if res.SetsInManifest != 1 {
-		t.Errorf("SetsInManifest = %d, want the one set with images stored", res.SetsInManifest)
+	if res.BundlesRebuilt != 0 {
+		t.Errorf("BundlesRebuilt = %d, want 0: an interrupted run must not bundle a half-fetched set", res.BundlesRebuilt)
 	}
 
 	// partial progress must land so the next run resumes rather than refetching

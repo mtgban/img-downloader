@@ -87,8 +87,8 @@ func run(ctx context.Context, bucketEnv, setsFlag string, dryRun, skipSealed, re
 
 	opts := mirror.Opts{Bucket: bucket, Base: base, Want: want, DryRun: dryRun, SkipSealed: skipSealed, RefetchSealed: refetchSealed, Log: log.Default()}
 	result, runErr := mirror.Run(ctx, opts)
-	fmt.Printf("pending=%d fetched=%d notPublished=%d fetchFailed=%d sets=%d\n",
-		result.Pending, result.Fetched, result.NotPublished, result.FetchFailed, result.SetsInManifest)
+	fmt.Printf("pending=%d fetched=%d notPublished=%d fetchFailed=%d bundlesRebuilt=%d\n",
+		result.Pending, result.Fetched, result.NotPublished, result.FetchFailed, result.BundlesRebuilt)
 	if runErr != nil {
 		// exit 1 on a partial fetch; the manifest and state were still saved
 		return runErr
