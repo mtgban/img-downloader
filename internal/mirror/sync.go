@@ -2,6 +2,7 @@ package mirror
 
 import (
 	"context"
+	"errors"
 	"log"
 
 	"github.com/mtgban/simplecloud"
@@ -30,7 +31,7 @@ type Result struct {
 	Fetched        int
 	FetchFailed    int
 	NotPublished   int
-	SetsInManifest int
+	BundlesRebuilt int
 }
 
 // Run performs one incremental mirror pass; DryRun only prints the plan.
@@ -45,6 +46,11 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 	if err != nil {
 		return res, err
 	}
+	manifest, err := LoadManifest(ctx, opts.Bucket, opts.Base)
+	if err != nil {
+		return res, err
+	}
+
 	if opts.RefetchSealed {
 		logger.Printf("re-mirroring %d sealed images already stored", forgetSealed(state))
 	}
@@ -56,7 +62,7 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 	res.Pending = len(fetches)
 	logger.Printf("%d images to fetch, %d wanted", len(fetches), len(opts.Want))
 	if opts.DryRun {
-		logger.Printf("dry run: nothing fetched or written")
+		logger.Printf("dry run: no fetch or bundle work performed")
 		return res, nil
 	}
 
@@ -64,10 +70,17 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 	res.Fetched, res.FetchFailed = fetched, failed
 	res.NotPublished = NotPublishedCount(state, opts.Want)
 
-	// The manifest is derived from state, so it costs no I/O and always
-	// describes exactly what was stored, even from a run that stopped early.
-	manifest := BuildManifest(state, opts.Want)
-	res.SetsInManifest = len(manifest)
+	// a run that stopped early skips bundle work: rebuilding from a half-fetched
+	// set would only produce a bundle the next run has to redo anyway. Ordinary
+	// scattered failures do not qualify, since those images stay absent from
+	// state and the bundle hash already accounts for their absence.
+	var bundleErr error
+	if ctx.Err() != nil || errors.Is(fetchErr, ErrTooManyFailures) {
+		logger.Printf("run stopped early, skipping bundle rebuild")
+	} else {
+		codes := BundlesToRebuild(manifest, SetDigests(state, opts.Want))
+		res.BundlesRebuilt, bundleErr = RebuildBundles(ctx, opts.Bucket, opts.Base, state, opts.Want, manifest, codes, logger)
+	}
 
 	// manifest and state persist even when the run was interrupted or work failed
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveTimeout)
@@ -79,7 +92,10 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 		return res, err
 	}
 
-	return res, fetchErr
+	if fetchErr != nil {
+		return res, fetchErr
+	}
+	return res, bundleErr
 }
 
 // forgetSealed drops every sealed entry from state, returning how many, so the
