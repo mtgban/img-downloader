@@ -23,12 +23,12 @@ type Opts struct {
 	// was building bundles describes bundles that were never stored; the diff
 	// then finds nothing to do and the run is a silent no-op.
 	RebuildBundles bool
-	// RefetchSealed forgets every sealed image already mirrored so this run
-	// stores them again. A sealed source URL never changes and state keys on
-	// that URL, so moving the sealed object path is otherwise invisible to the
-	// diff and no run would ever write the new location.
-	RefetchSealed bool
-	Log           *log.Logger
+	// RetryMissing forgets the images a source answered it had none of, so
+	// this run asks again. A not-published marker keys on a URL that never
+	// changes, so the diff skips it forever; that is right for art nobody ever
+	// published and wrong the day the source finally publishes it.
+	RetryMissing bool
+	Log          *log.Logger
 }
 
 // Result reports one pass's work.
@@ -57,8 +57,8 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 		return res, err
 	}
 
-	if opts.RefetchSealed {
-		logger.Printf("re-mirroring %d sealed images already stored", forgetSealed(state))
+	if opts.RetryMissing {
+		logger.Printf("re-asking for %d images previously not published at source", forgetMissing(state))
 	}
 
 	fetches := NeedFetch(state, opts.Want)
@@ -111,12 +111,12 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 	return res, bundleErr
 }
 
-// forgetSealed drops every sealed entry from state, returning how many, so the
-// diff re-queues them and they land at whatever the current object path is.
-func forgetSealed(state State) int {
+// forgetMissing drops every not-published marker from state, returning how
+// many, so the diff queues those images again.
+func forgetMissing(state State) int {
 	n := 0
-	for key := range state {
-		if IsSealedKey(key) {
+	for key, entry := range state {
+		if entry.Missing {
 			delete(state, key)
 			n++
 		}

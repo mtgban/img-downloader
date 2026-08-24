@@ -12,8 +12,8 @@ on:
         description: plan only
         required: false
         default: "false"
-      refetch_sealed:
-        description: re-store every sealed image, for a sealed object path change
+      retry_missing:
+        description: ask again for images the source previously had none of
         required: false
         default: "false"
       rebuild_bundles:
@@ -41,12 +41,12 @@ jobs:
           B2_ACCESS_SECRET: ${{ secrets.B2_ACCESS_SECRET }}
           SETS: ${{ inputs.sets }}
           DRY_RUN: ${{ inputs.dry_run }}
-          REFETCH_SEALED: ${{ inputs.refetch_sealed }}
+          RETRY_MISSING: ${{ inputs.retry_missing }}
           REBUILD_BUNDLES: ${{ inputs.rebuild_bundles }}
         run: |
           FLAGS=()
           if [ -n "$SETS" ]; then FLAGS+=(-sets "$SETS"); fi
           if [ "$DRY_RUN" = "true" ]; then FLAGS+=(-dry-run); fi
-          if [ "$REFETCH_SEALED" = "true" ]; then FLAGS+=(-refetch-sealed); fi
+          if [ "$RETRY_MISSING" = "true" ]; then FLAGS+=(-retry-missing); fi
           if [ "$REBUILD_BUNDLES" = "true" ]; then FLAGS+=(-rebuild-bundles); fi
           ./imgdl "${FLAGS[@]}"
