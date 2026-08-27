@@ -52,9 +52,34 @@ type notPublishedError struct{ status int }
 
 func (e notPublishedError) Error() string { return fmt.Sprintf("HTTP %d", e.status) }
 
+// undecodableError is a source answering with something that is not an image.
+//
+// It counts as not-published rather than as a failure, because that is what it
+// is: TCGplayer answers a missing product image with a 70 byte "Not Found" page
+// under HTTP 200 and a Content-Type of image/jpeg, so the status code says
+// nothing and the body is the only honest part of the response. Retrying cannot
+// turn that into an image.
+//
+// Calling it a failure instead is what blocked the corpus: the fetch fails, so
+// no object is written, but the key stays in state and therefore in its set's
+// digests, so the bundle rebuild then asks the bucket for an object that was
+// never stored and 404s. One product with no artwork took its whole set's
+// bundle down on every run, permanently.
+type undecodableError struct{ err error }
+
+func (e undecodableError) Error() string { return e.err.Error() }
+func (e undecodableError) Unwrap() error { return e.err }
+
+// isNotPublished reports whether the source has answered that it has no usable
+// image at this URL, whether it said so with a status code or by serving
+// something that is not an image.
 func isNotPublished(err error) bool {
-	var e notPublishedError
-	return errors.As(err, &e)
+	var np notPublishedError
+	if errors.As(err, &np) {
+		return true
+	}
+	var ud undecodableError
+	return errors.As(err, &ud)
 }
 
 // hostStat tracks one source host's failure streak for the circuit breaker.
@@ -257,7 +282,7 @@ func (f *fetcher) fetchOne(ctx context.Context, host string, img Image) error {
 	// corpus claiming bundles that no longer match it.
 	data, err = ToWebP(data)
 	if err != nil {
-		return err
+		return undecodableError{err}
 	}
 
 	sum := sha256.Sum256(data)
