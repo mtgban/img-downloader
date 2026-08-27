@@ -97,6 +97,29 @@ next run.
   The variant sits above the face in the path so a whole variant is one prefix,
   addable or droppable without moving anything else.
 
+### Cleaning up
+
+Superseded bundles are removed by the run that supersedes them. Nothing else
+is: an image left behind by a layout or format change stays in the bucket,
+because the mirror writes to the path the current layout asks for and has no
+reason to look at the old one.
+
+`scripts/prune-bucket.sh` finds those and, with `--apply`, removes them. It
+reports and deletes nothing by default. Four things accumulate:
+
+- `singles/front/**` — pre-`grid` jpg singles, superseded by
+  `singles/grid/front/**`.
+- `normal/**` — from before singles moved out of Scryfall's own url path.
+- `sealed/**/*.jpg` — superseded when sealed began being converted to webp.
+  These share a directory with their replacements, so this is the one case that
+  can never be a prefix delete.
+- `bundles/**` — generations from before the run started removing them.
+
+Nothing is deleted unless its replacement is present, which is the whole safety
+model: an orphan is only an orphan because something newer took its place, so
+if that newer object is missing the old one is still the only copy. The script
+holds those back and names them.
+
 ### Stored format
 
 Every mirrored object is webp, whatever its source served, so that nothing
