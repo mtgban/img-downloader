@@ -131,24 +131,27 @@ func GameSingleObjectPath(id, variant string) (string, error) {
 	return fmt.Sprintf("singles/%s/front/%s/%s/%s.%s", variant, c1, c2, id, ImageExt), nil
 }
 
-// GameSealedObjectPath is SealedObjectPath for a non-Magic game.
+// GameSealedObjectPath is SealedObjectPath for a non-Magic game: sealed sits
+// under a directory per set code, the same shape Magic's does, so one layout
+// describes the bucket whatever game wrote it.
 //
-// It drops Magic's per-set directory and shards on the product id instead, for
-// one reason: the key has to be enough. Magic's sealed key encodes the set code
-// because its id is a TCGplayer product id, which means nothing to the rest of
-// the system on its own. A datastore game's product id is already a uuid in the
-// same namespace as its cards, so pairing it with a set code buys nothing and
-// costs the ability to parse the pair back — Lorcana set codes can be a single
-// character and its product ids contain dashes ("1" and "1-600001"), so
-// "p-1-1-600001" has no unambiguous split. Sharding on the id alone keeps every
-// key self describing: a reader derives the object path from the key and needs
-// no set code at all.
-func GameSealedObjectPath(id string) (string, error) {
+// This once sharded on the product id instead, to keep the object path
+// derivable from the key alone. The key cannot carry a set code — Lorcana set
+// codes can be a single character and its product ids contain dashes ("1" and
+// "1-600001"), so "p-1-1-600001" has no unambiguous split — and while the
+// website resolved image requests by turning a key back into a path, that
+// mattered. It no longer does: clients read whole bundles now, and every path
+// in one comes from the want-list, which knows the set code. Nothing derives a
+// path from a key any more, so the set code costs nothing and a bucket
+// browsable by set is worth having.
+func GameSealedObjectPath(setCode, id string) (string, error) {
+	if !SafeSegment(setCode) {
+		return "", fmt.Errorf("mirror: %q is not usable as a set code", setCode)
+	}
 	if !SafeSegment(id) {
 		return "", fmt.Errorf("mirror: %q is not usable as a sealed product id", id)
 	}
-	c1, c2 := shard(id)
-	return fmt.Sprintf("sealed/%s/%s/%s.%s", c1, c2, id, ImageExt), nil
+	return fmt.Sprintf("sealed/%s/%s.%s", setCode, id, ImageExt), nil
 }
 
 // GameSealedKey returns the manifest/state image key for a non-Magic sealed

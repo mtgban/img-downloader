@@ -98,8 +98,12 @@ func TestGameObjectPathsRejectUnsafeSegments(t *testing.T) {
 		if got, err := mirror.GameSingleObjectPath(bad, "full"); err == nil {
 			t.Errorf("GameSingleObjectPath(%q) = %q, want an error", bad, got)
 		}
-		if got, err := mirror.GameSealedObjectPath(bad); err == nil {
-			t.Errorf("GameSealedObjectPath(%q) = %q, want an error", bad, got)
+		if got, err := mirror.GameSealedObjectPath("OGN", bad); err == nil {
+			t.Errorf("GameSealedObjectPath(OGN, %q) = %q, want an error", bad, got)
+		}
+		// the set code is a path segment too, so it is guarded the same way
+		if got, err := mirror.GameSealedObjectPath(bad, "ogn-600001"); err == nil {
+			t.Errorf("GameSealedObjectPath(%q, ...) = %q, want an error", bad, got)
 		}
 	}
 	// the variant is interpolated too
@@ -109,8 +113,8 @@ func TestGameObjectPathsRejectUnsafeSegments(t *testing.T) {
 }
 
 func TestGameSealedObjectPathAndKey(t *testing.T) {
-	got, err := mirror.GameSealedObjectPath("ogn-600001")
-	if err != nil || got != "sealed/o/g/ogn-600001.webp" {
+	got, err := mirror.GameSealedObjectPath("OGN", "ogn-600001")
+	if err != nil || got != "sealed/OGN/ogn-600001.webp" {
 		t.Errorf("GameSealedObjectPath = %q, %v", got, err)
 	}
 	key := mirror.GameSealedKey("ogn-600001")

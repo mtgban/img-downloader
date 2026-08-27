@@ -165,15 +165,14 @@ scryfall ids.
 - Singles object path: `singles/full/front/<c1>/<c2>/<uuid>.webp`. `full` is
   the mtgmatcher `Images` key mirrored, occupying the slot Magic's `grid`
   does; these games publish one image per card rather than a set of encodes.
-- Sealed object path: `sealed/<c1>/<c2>/<uuid>.webp` — sharded on the id, with
-  no per-set directory. Magic's sealed key encodes the set code because its id
-  is a TCGplayer product id, meaningless on its own; a datastore game's product
-  id is already a uuid in the same namespace as its cards, so pairing it with a
-  set code buys nothing and costs the ability to parse the pair back. Lorcana
-  set codes can be a single character and its product ids contain dashes (`1`
-  and `1-600001`), so `p-1-1-600001` has no unambiguous split. Every key is
-  therefore self-describing: a reader derives the object path from the key
-  alone and needs no set code.
+- Sealed object path: `sealed/<SETCODE>/<uuid>.webp`, the same shape Magic's
+  sealed takes, so one layout describes the bucket whatever game wrote it.
+  The *key* still carries no set code: Lorcana set codes can be a single
+  character and its product ids contain dashes (`1` and `1-600001`), so
+  `p-1-1-600001` has no unambiguous split. That only ever mattered because the
+  website used to turn a key back into an object path; clients read whole
+  bundles now, and every path in one comes from the want-list, which knows the
+  set code.
 - `<c1>/<c2>` are the first two characters of the id, an id shorter than two
   characters being left-padded (`7` files under `0/7`) so every game has the
   same tree depth.
