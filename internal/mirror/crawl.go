@@ -134,6 +134,15 @@ func (f *fetcher) record(host string, img Image, err error) bool {
 		stat.streak = append(stat.streak, img.Key)
 	} else {
 		f.failed++
+		// A failure that is not the source answering "no image here" is rare
+		// and worth acting on, but the closing summary is only a count: one
+		// image in three thousand failing leaves nothing to go on, and the
+		// bundle it breaks names a set rather than an image. This is the only
+		// place the key, the url and the cause all still exist together.
+		//
+		// Not-published is deliberately left to its count. There are hundreds
+		// of those and they are the expected answer, not a fault.
+		f.log.Printf("fetch %s failed: %v (%s)", img.Key, err, img.URL)
 	}
 
 	if f.tripped != nil {
