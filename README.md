@@ -61,7 +61,10 @@ next run.
   bucket root holds only the few top level trees rather than a directory per
   set code. TCGplayer serves jpg; the mirror converts it on the way in.
 - Derived artifacts at the bucket base: `bundles/<SETCODE>-<hash>.zip`,
-  `images-manifest.json`, `mirror-state.json`.
+  `images-manifest.json`, `mirror-state.json`. A rebuild deletes the bundle it
+  supersedes, since the manifest entry it replaces is the only record that
+  object's hash ever had. Bundles are uncompressed, so a generation nothing
+  points at costs about what the sets it covers cost.
 - Manifest JSON: `{"<SETCODE>": {"h": "<fnv64a hex>", "n": <imageCount>, "b": <totalBytes>}}`.
 - Bundle zip: flat entries named `<imageKey>.webp`, built deterministically
   (sorted, `zip.Store`, mtime epoch 0). Image key is the scryfallId for
