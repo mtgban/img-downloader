@@ -66,7 +66,7 @@ func TestBuildWantSealed(t *testing.T) {
 	wantImg := mirror.Image{
 		Key:        "p-NEO-111",
 		URL:        "https://product-images.tcgplayer.com/111.jpg",
-		ObjectPath: "sealed/NEO/111.jpg",
+		ObjectPath: "sealed/NEO/111.webp",
 		SetCode:    "NEO",
 	}
 	if got != wantImg {

@@ -89,7 +89,7 @@ func TestBuildWantKeysSinglesByBaseUUID(t *testing.T) {
 	expect := mirror.Image{
 		Key:        "460",
 		URL:        "https://cdn.example.invalid/cards/elsa-460.png",
-		ObjectPath: "singles/full/front/4/6/460.png",
+		ObjectPath: "singles/full/front/4/6/460.webp",
 		SetCode:    "1",
 	}
 	if got != expect {
@@ -114,7 +114,7 @@ func TestBuildWantHandlesDashedIDs(t *testing.T) {
 	if !ok {
 		t.Fatalf("want has no entry for dashed uuid; keys: %v", sortedKeys(want))
 	}
-	if got.ObjectPath != "singles/full/front/o/g/ogn-066-298.jpg" {
+	if got.ObjectPath != "singles/full/front/o/g/ogn-066-298.webp" {
 		t.Errorf("ObjectPath = %q", got.ObjectPath)
 	}
 	if got.SetCode != "OGN" {
@@ -132,7 +132,7 @@ func TestBuildWantSealedKeyIsSelfDescribing(t *testing.T) {
 	expect := mirror.Image{
 		Key:        "p-1-600001",
 		URL:        "https://cdn.example.invalid/sealed/box.jpg",
-		ObjectPath: "sealed/1/-/1-600001.jpg",
+		ObjectPath: "sealed/1/-/1-600001.webp",
 		SetCode:    "1",
 	}
 	if got != expect {
@@ -165,28 +165,6 @@ func TestBuildWantFilter(t *testing.T) {
 	}
 	if _, ok := want["460"]; ok {
 		t.Error("filtered want should drop the set 1 card")
-	}
-}
-
-// The extension travels with the image because these games are mirrored byte
-// for byte from their own CDN, which does not have to serve webp like Scryfall.
-func TestExtensionOf(t *testing.T) {
-	for _, tt := range []struct {
-		url  string
-		want string
-		ok   bool
-	}{
-		{"https://cdn.example.invalid/a/b.png", "png", true},
-		{"https://cdn.example.invalid/a/b.JPG", "jpg", true},
-		{"https://cdn.example.invalid/a/b.webp?v=3", "webp", true},
-		{"https://cdn.example.invalid/a/b", "", false},
-		{"https://cdn.example.invalid/a/b.", "", false},
-		{"://nonsense", "", false},
-	} {
-		got, ok := extensionOf(tt.url)
-		if ok != tt.ok || got != tt.want {
-			t.Errorf("extensionOf(%q) = (%q, %v), want (%q, %v)", tt.url, got, ok, tt.want, tt.ok)
-		}
 	}
 }
 

@@ -242,6 +242,15 @@ func (f *fetcher) fetchOne(ctx context.Context, host string, img Image) error {
 		return err
 	}
 
+	// Convert before hashing, because the digest has to describe what is in
+	// the bucket rather than what the source served: it is what the bundle
+	// hash is built from, so a digest of the source would leave a re-encoded
+	// corpus claiming bundles that no longer match it.
+	data, err = ToWebP(data)
+	if err != nil {
+		return err
+	}
+
 	sum := sha256.Sum256(data)
 	digest := hex.EncodeToString(sum[:])
 
@@ -259,9 +268,10 @@ func (f *fetcher) fetchOne(ctx context.Context, host string, img Image) error {
 	}
 
 	entry := StateEntry{
-		Digest:    digest,
-		FetchedAt: time.Now().UTC().Format(time.RFC3339),
-		Source:    img.URL,
+		Digest:     digest,
+		FetchedAt:  time.Now().UTC().Format(time.RFC3339),
+		Source:     img.URL,
+		ObjectPath: img.ObjectPath,
 	}
 
 	f.mu.Lock()

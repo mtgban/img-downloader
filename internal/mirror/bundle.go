@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"path"
 	"strings"
 	"sync"
 	"time"
@@ -155,11 +154,10 @@ func rebuildOne(ctx context.Context, bucket simplecloud.ReadWriter, base string,
 		if err != nil {
 			return ImageInfo{}, err
 		}
-		// The extension comes from where the image is actually stored, since
-		// singles are Scryfall webp and sealed are TCGplayer jpg. The client
-		// reads the entry name to decide the content type it caches under, so
-		// naming them all .jpg would mislabel most of the corpus.
-		entries = append(entries, BundleEntry{Name: key + path.Ext(img.ObjectPath), Data: data})
+		// Every stored object is webp, so every entry is named for one, and
+		// the client has one content type to cache under rather than a guess
+		// to make from the name.
+		entries = append(entries, BundleEntry{Name: key + "." + ImageExt, Data: data})
 	}
 
 	zipData, err := BuildBundle(entries)

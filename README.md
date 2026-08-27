@@ -52,26 +52,33 @@ next run.
 
 - Singles object path: `singles/grid/front/<c1>/<c2>/<scryfallId>.webp`, where
   `c1`/`c2` are the first two characters of the id. Built from the id rather
-  than from Scryfall'''s URL, so the layout is the mirror'''s own and pairs with
+  than from Scryfall's URL, so the layout is the mirror's own and pairs with
   `sealed/`; a key that is not a scryfall id is rejected rather than used to
   place an object. This happens to match where Scryfall files the same image,
   under `normal/` instead of `singles/`.
-- Sealed object path: `sealed/<SETCODE>/<tcgplayerProductId>.jpg` (SETCODE is
+- Sealed object path: `sealed/<SETCODE>/<tcgplayerProductId>.webp` (SETCODE is
   the uppercase MTGJSON code). Sealed sits under one shared prefix so the
   bucket root holds only the few top level trees rather than a directory per
-  set code.
+  set code. TCGplayer serves jpg; the mirror converts it on the way in.
 - Derived artifacts at the bucket base: `bundles/<SETCODE>-<hash>.zip`,
   `images-manifest.json`, `mirror-state.json`.
 - Manifest JSON: `{"<SETCODE>": {"h": "<fnv64a hex>", "n": <imageCount>, "b": <totalBytes>}}`.
-- Bundle zip: flat entries named `<imageKey>.jpg`, built deterministically
+- Bundle zip: flat entries named `<imageKey>.webp`, built deterministically
   (sorted, `zip.Store`, mtime epoch 0). Image key is the scryfallId for
   singles, `p-<SETCODE>-<tcgId>` for sealed.
 - Bundle hash: fnv64a hex over sorted `"<key> <sha256hex>\n"` lines.
-- State JSON: `{"<imageKey>": {"digest": "<sha256hex>", "fetchedAt": "RFC3339", "source": "<url>"}}`,
-  plus an optional `"missing": true` on entries the source has no image for
-  (see below); those carry no digest and are never bundled.
-  A key is refetched when its stored `source` differs from the currently
-  wanted URL. Sealed URLs never change, so sealed images are fetch-once.
+- State JSON: `{"<imageKey>": {"digest": "<sha256hex>", "fetchedAt": "RFC3339",
+  "source": "<url>", "objectPath": "<path>"}}`, plus an optional
+  `"missing": true` on entries the source has no image for (see below); those
+  carry no digest and are never bundled. `digest` is of the bytes stored, which
+  are not the bytes served — see *Stored format*.
+  A key is refetched when its stored `source` differs from the currently wanted
+  URL, or when its `objectPath` does: a source url alone cannot see an object
+  that moved, and converting the corpus to webp moved every object stored in
+  its source's own format without changing one url. Entries written before
+  `objectPath` was recorded are judged by their source's extension, which is a
+  faithful account of what was stored back when bytes were written through
+  untouched. Sealed URLs never change, so sealed images are fetch-once.
   `source` keeps the whole Scryfall URL including its `?<epoch>` query, which
   Scryfall bumps whenever it reprocesses an image, so a reprocess is what
   triggers the refetch. The object path is derived from the URL path only, so
@@ -80,26 +87,59 @@ next run.
   that this tracks reprocessing, not relocation: were Scryfall to change the
   path rather than the query, the new object is written correctly but the old
   one is left behind.
-- Singles are Scryfall'''s `grid` variant: their own webp encode at the same
+- Singles are Scryfall's `grid` variant: their own webp encode at the same
   488x680 as the `normal` jpg, for a little over half the bytes (ARB measured
-  20,967,673 -> 9,534,479, 54.5% smaller). Nothing is transcoded here; it is
-  stored exactly as served. Sealed images stay jpg, being what TCGplayer
-  serves. The variant sits above the face in the path so a whole variant is
-  one prefix, addable or droppable without moving anything else.
+  20,967,673 -> 9,534,479, 54.5% smaller). Those are stored exactly as served,
+  because they already are what the mirror would produce — see *Stored format*.
+  The variant sits above the face in the path so a whole variant is one prefix,
+  addable or droppable without moving anything else.
+
+### Stored format
+
+Every mirrored object is webp, whatever its source served, so that nothing
+downstream has to ask what an image is: object paths, bundle entry names and
+the website's cache urls all end the same way, and the client has one content
+type rather than a guess to make.
+
+Sources arrive as webp (Scryfall), jpg (TCGplayer, Lorcana) and png
+(Riftbound). Conversion happens on fetch, before the digest is taken, because
+the digest has to describe what is in the bucket rather than what the source
+served — it is what bundle hashes are built from.
+
+Two rules do most of the work:
+
+- **Bytes already webp are passed through untouched.** Re-encoding lossy bytes
+  into the same lossy format spends quality to save nothing. Measured on one
+  Scryfall grid image, re-encoding it at q80 produced 78,356 bytes against the
+  73,756 it arrived as: 6% *larger*, and worse looking. Since Scryfall is
+  nearly the whole corpus, this is also what keeps the conversion cheap — those
+  objects neither move nor get rewritten.
+- **Anything larger than 488x680 is scaled down to fit,** preserving aspect
+  ratio and never scaling up. That is Scryfall's grid geometry, which the Magic
+  corpus already holds, and it clears the largest the website ever draws a card
+  (its lightbox caps at 440 css px; everything else is a thumbnail). A png card
+  scan measured 1,476,439 bytes at 744x1040 and 77,154 at 486x680: 19x smaller.
+
+Quality is 80 and the corpus is stuck with it, since changing it re-digests and
+re-stores every image that is not already webp. It is not higher because of
+what the sources are: a jpg is already lossy and gains almost nothing, and at
+q90 a jpg re-encode comes out larger than the jpg it came from.
+
+A source the mirror cannot decode is a failed fetch, not a stored object.
 
 ### Datastore-backed games (Lorcana, Riftbound)
 
 Same tree shape, different key namespace, because these games' ids are not
-scryfall ids and their images are not Scryfall's webp.
+scryfall ids.
 
 - Image key is the card's own mtgmatcher uuid for singles and `p-<uuid>` for
   sealed products. The key is the card's id, never the image URL's basename:
   Magic can use the basename because a Scryfall URL is named for the card,
   whereas these games' URLs are their CDN's own filenames.
-- Singles object path: `singles/full/front/<c1>/<c2>/<uuid>.<ext>`. `full` is
+- Singles object path: `singles/full/front/<c1>/<c2>/<uuid>.webp`. `full` is
   the mtgmatcher `Images` key mirrored, occupying the slot Magic's `grid`
   does; these games publish one image per card rather than a set of encodes.
-- Sealed object path: `sealed/<c1>/<c2>/<uuid>.<ext>` — sharded on the id, with
+- Sealed object path: `sealed/<c1>/<c2>/<uuid>.webp` — sharded on the id, with
   no per-set directory. Magic's sealed key encodes the set code because its id
   is a TCGplayer product id, meaningless on its own; a datastore game's product
   id is already a uuid in the same namespace as its cards, so pairing it with a
@@ -111,9 +151,8 @@ scryfall ids and their images are not Scryfall's webp.
 - `<c1>/<c2>` are the first two characters of the id, an id shorter than two
   characters being left-padded (`7` files under `0/7`) so every game has the
   same tree depth.
-- `<ext>` is the source URL's own extension, lowercased. The mirror stores the
-  bytes exactly as served and does not transcode, and these CDNs are not
-  obliged to serve webp the way Scryfall does.
+- The extension is always `webp`, whatever the CDN served: these games publish
+  jpg and png, and the mirror converts on the way in. See *Stored format*.
 - The set code is still recorded on each image and is what the manifest is
   keyed by; it is simply not in the object path.
 - A printing's foil and nonfoil variants are separate uuids in mtgmatcher

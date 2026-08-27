@@ -37,7 +37,7 @@ func TestDownloadRetriesOn429(t *testing.T) {
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
-		w.Write([]byte("jpegbytes"))
+		w.Write(testImage("jpegbytes"))
 	}))
 	defer srv.Close()
 
@@ -46,7 +46,7 @@ func TestDownloadRetriesOn429(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(data) != "jpegbytes" {
+	if !bytes.Equal(data, testImage("jpegbytes")) {
 		t.Errorf("body = %q", data)
 	}
 	if hits != 3 {
@@ -83,8 +83,12 @@ func TestDownloadGivesUpAfterRetries(t *testing.T) {
 	}
 }
 
+// What lands in the bucket is the converted image, not what the source served,
+// and the digest describes that: it is what bundle hashes are built from, so a
+// digest of the source bytes would leave a converted corpus claiming bundles
+// that no longer match it.
 func TestFetchOneWritesShardedPathAndState(t *testing.T) {
-	payload := []byte("jpegbytes")
+	payload := testImage("jpegbytes")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write(payload)
 	}))
@@ -101,17 +105,27 @@ func TestFetchOneWritesShardedPathAndState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(stored) != string(payload) {
-		t.Error("stored bytes differ from source")
+	converted, err := ToWebP(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(stored, payload) {
+		t.Error("stored the source bytes unconverted")
+	}
+	if !bytes.Equal(stored, converted) {
+		t.Error("stored bytes are not the converted image")
 	}
 
 	entry := f.state["7673784e-db4b-43a1-8d55-1bb9fc1e284f"]
-	sum := sha256.Sum256(payload)
+	sum := sha256.Sum256(converted)
 	if entry.Digest != hex.EncodeToString(sum[:]) {
-		t.Errorf("digest = %q", entry.Digest)
+		t.Errorf("digest = %q, want the digest of the stored bytes", entry.Digest)
 	}
 	if entry.Source != srv.URL {
 		t.Errorf("source = %q, want %q", entry.Source, srv.URL)
+	}
+	if entry.ObjectPath != img.ObjectPath {
+		t.Errorf("objectPath = %q, want %q", entry.ObjectPath, img.ObjectPath)
 	}
 	if entry.FetchedAt == "" {
 		t.Error("fetchedAt not set")
@@ -124,7 +138,7 @@ func TestFetchAllReturnsErrorAndKeepsGoingAfterFailure(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		w.Write([]byte("jpegbytes"))
+		w.Write(testImage("jpegbytes"))
 	}))
 	defer srv.Close()
 
@@ -147,7 +161,7 @@ func TestFetchAllReturnsErrorAndKeepsGoingAfterFailure(t *testing.T) {
 
 func TestFetchAllSnapshotsStateAfterRun(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("jpegbytes"))
+		w.Write(testImage("jpegbytes"))
 	}))
 	defer srv.Close()
 
@@ -170,7 +184,7 @@ func TestFetchAllSnapshotsStateAfterRun(t *testing.T) {
 
 func TestFetchAllWiring(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("jpegbytes"))
+		w.Write(testImage("jpegbytes"))
 	}))
 	defer srv.Close()
 
@@ -192,7 +206,7 @@ func TestFetchAllWiring(t *testing.T) {
 
 func TestRunStopsPromptlyOnCancelAndSavesSnapshot(t *testing.T) {
 	srvOK := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("jpegbytes"))
+		w.Write(testImage("jpegbytes"))
 	}))
 	defer srvOK.Close()
 
@@ -253,7 +267,7 @@ func TestFetchAllInterruptStopsWithoutCountingFailures(t *testing.T) {
 			<-r.Context().Done()
 			return
 		}
-		w.Write([]byte("jpegbytes"))
+		w.Write(testImage("jpegbytes"))
 	}))
 	defer srv.Close()
 
@@ -330,7 +344,7 @@ func TestFetchAllToleratesScatteredFailures(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		w.Write([]byte("jpegbytes"))
+		w.Write(testImage("jpegbytes"))
 	}))
 	defer srv.Close()
 
@@ -360,7 +374,7 @@ func TestNotPublishedIsRecordedAndNotRefetched(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		w.Write([]byte("jpegbytes"))
+		w.Write(testImage("jpegbytes"))
 	}))
 	defer srv.Close()
 
@@ -438,7 +452,7 @@ func TestTripTakesBackMarkersFromItsStreak(t *testing.T) {
 func runWithProgress(t *testing.T, interval time.Duration) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("jpegbytes"))
+		w.Write(testImage("jpegbytes"))
 	}))
 	defer srv.Close()
 
