@@ -31,6 +31,11 @@ type StateEntry struct {
 	FetchedAt string `json:"fetchedAt"`
 	Source    string `json:"source"`
 	Missing   bool   `json:"missing,omitempty"`
+	// ObjectPath is where the image was stored, so a run can tell that an
+	// object wants moving even though its source url is unchanged. Absent on
+	// entries written before it was recorded; NeedFetch judges those by their
+	// source instead.
+	ObjectPath string `json:"objectPath,omitempty"`
 }
 
 // State is the mirror-state.json document, keyed by image key.
@@ -81,7 +86,7 @@ func SingleObjectPath(scryfallID string) (string, error) {
 	if !scryfallIDPattern.MatchString(scryfallID) {
 		return "", fmt.Errorf("mirror: %q is not a scryfall id", scryfallID)
 	}
-	return fmt.Sprintf("singles/grid/front/%s/%s/%s.webp", scryfallID[0:1], scryfallID[1:2], scryfallID), nil
+	return fmt.Sprintf("singles/grid/front/%s/%s/%s.%s", scryfallID[0:1], scryfallID[1:2], scryfallID, ImageExt), nil
 }
 
 // safeSegmentPattern bounds what a non-Magic card id may be before it becomes
@@ -112,19 +117,18 @@ func shard(id string) (string, string) {
 // face above the shard — so the website resolves every game's singles with one
 // path builder and only the key validation differs.
 //
-// ext is the source image's extension, without a dot. Unlike Magic, which is
-// always Scryfall's webp, a datastore-backed game's image URL is whatever its
-// own CDN serves, so the extension travels with the image rather than being
-// assumed.
-func GameSingleObjectPath(id, variant, ext string) (string, error) {
+// The stored extension is ImageExt for every game: a datastore-backed game's
+// CDN serves whatever it likes, but the mirror converts on the way in, so what
+// the source called the file has no bearing on where it lands.
+func GameSingleObjectPath(id, variant string) (string, error) {
 	if !SafeSegment(id) {
 		return "", fmt.Errorf("mirror: %q is not usable as a card id", id)
 	}
-	if !SafeSegment(variant) || !SafeSegment(ext) {
-		return "", fmt.Errorf("mirror: variant %q or extension %q is not a safe path segment", variant, ext)
+	if !SafeSegment(variant) {
+		return "", fmt.Errorf("mirror: variant %q is not a safe path segment", variant)
 	}
 	c1, c2 := shard(id)
-	return fmt.Sprintf("singles/%s/front/%s/%s/%s.%s", variant, c1, c2, id, ext), nil
+	return fmt.Sprintf("singles/%s/front/%s/%s/%s.%s", variant, c1, c2, id, ImageExt), nil
 }
 
 // GameSealedObjectPath is SealedObjectPath for a non-Magic game.
@@ -139,15 +143,12 @@ func GameSingleObjectPath(id, variant, ext string) (string, error) {
 // "p-1-1-600001" has no unambiguous split. Sharding on the id alone keeps every
 // key self describing: a reader derives the object path from the key and needs
 // no set code at all.
-func GameSealedObjectPath(id, ext string) (string, error) {
+func GameSealedObjectPath(id string) (string, error) {
 	if !SafeSegment(id) {
 		return "", fmt.Errorf("mirror: %q is not usable as a sealed product id", id)
 	}
-	if !SafeSegment(ext) {
-		return "", fmt.Errorf("mirror: extension %q is not a safe path segment", ext)
-	}
 	c1, c2 := shard(id)
-	return fmt.Sprintf("sealed/%s/%s/%s.%s", c1, c2, id, ext), nil
+	return fmt.Sprintf("sealed/%s/%s/%s.%s", c1, c2, id, ImageExt), nil
 }
 
 // GameSealedKey returns the manifest/state image key for a non-Magic sealed
@@ -159,7 +160,7 @@ func GameSealedKey(id string) string { return "p-" + id }
 // Sealed lives under one shared prefix rather than a directory per set code,
 // so the bucket root holds only the handful of top level trees.
 func SealedObjectPath(setCode, tcgID string) string {
-	return fmt.Sprintf("sealed/%s/%s.jpg", setCode, tcgID)
+	return fmt.Sprintf("sealed/%s/%s.%s", setCode, tcgID, ImageExt)
 }
 
 // SealedKey returns the manifest/state image key for a sealed product.

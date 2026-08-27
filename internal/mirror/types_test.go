@@ -74,17 +74,19 @@ func TestSingleObjectPathRejectsAnythingButAnID(t *testing.T) {
 	}
 }
 
+// The stored extension does not follow the source's: whatever a game's CDN
+// serves, the mirror converts it on the way in, so every path ends in webp.
 func TestGameSingleObjectPath(t *testing.T) {
-	for _, tt := range []struct{ id, ext, want string }{
+	for _, tt := range []struct{ id, want string }{
 		// Riftbound ids carry dashes, Lorcana's are short integers
-		{"ogn-066-298", "jpg", "singles/full/front/o/g/ogn-066-298.jpg"},
-		{"460", "png", "singles/full/front/4/6/460.png"},
+		{"ogn-066-298", "singles/full/front/o/g/ogn-066-298.webp"},
+		{"460", "singles/full/front/4/6/460.webp"},
 		// a one character id still has to fill both shard levels
-		{"7", "png", "singles/full/front/0/7/7.png"},
+		{"7", "singles/full/front/0/7/7.webp"},
 	} {
-		got, err := mirror.GameSingleObjectPath(tt.id, "full", tt.ext)
+		got, err := mirror.GameSingleObjectPath(tt.id, "full")
 		if err != nil || got != tt.want {
-			t.Errorf("GameSingleObjectPath(%q, full, %q) = %q, %v; want %q", tt.id, tt.ext, got, err, tt.want)
+			t.Errorf("GameSingleObjectPath(%q, full) = %q, %v; want %q", tt.id, got, err, tt.want)
 		}
 	}
 }
@@ -93,25 +95,22 @@ func TestGameSingleObjectPath(t *testing.T) {
 // that is not a plain token could place an object anywhere in the bucket.
 func TestGameObjectPathsRejectUnsafeSegments(t *testing.T) {
 	for _, bad := range []string{"", ".", "..", "../../mirror-state.json", "a/b", ".hidden", "a b"} {
-		if got, err := mirror.GameSingleObjectPath(bad, "full", "png"); err == nil {
+		if got, err := mirror.GameSingleObjectPath(bad, "full"); err == nil {
 			t.Errorf("GameSingleObjectPath(%q) = %q, want an error", bad, got)
 		}
-		if got, err := mirror.GameSealedObjectPath(bad, "jpg"); err == nil {
+		if got, err := mirror.GameSealedObjectPath(bad); err == nil {
 			t.Errorf("GameSealedObjectPath(%q) = %q, want an error", bad, got)
 		}
 	}
-	// the variant and extension are interpolated too
-	if _, err := mirror.GameSingleObjectPath("460", "../x", "png"); err == nil {
+	// the variant is interpolated too
+	if _, err := mirror.GameSingleObjectPath("460", "../x"); err == nil {
 		t.Error("GameSingleObjectPath with a traversing variant = nil error, want an error")
-	}
-	if _, err := mirror.GameSingleObjectPath("460", "full", "png/../.."); err == nil {
-		t.Error("GameSingleObjectPath with a traversing extension = nil error, want an error")
 	}
 }
 
 func TestGameSealedObjectPathAndKey(t *testing.T) {
-	got, err := mirror.GameSealedObjectPath("ogn-600001", "jpg")
-	if err != nil || got != "sealed/o/g/ogn-600001.jpg" {
+	got, err := mirror.GameSealedObjectPath("ogn-600001")
+	if err != nil || got != "sealed/o/g/ogn-600001.webp" {
 		t.Errorf("GameSealedObjectPath = %q, %v", got, err)
 	}
 	key := mirror.GameSealedKey("ogn-600001")
@@ -123,15 +122,18 @@ func TestGameSealedObjectPathAndKey(t *testing.T) {
 	}
 }
 
-// The Magic layout is a settled contract with the website and an existing
-// 120k image bucket; the generalisation must not have moved it.
+// Magic's singles layout is a settled contract with the website and an
+// existing 120k image bucket, and it is what keeps converting the corpus to
+// webp cheap: Scryfall already serves webp, so those objects neither move nor
+// get rewritten. Sealed did move, because TCGplayer serves jpg and that is now
+// converted on the way in.
 func TestMagicObjectPathsUnchanged(t *testing.T) {
 	const id = "7673784e-db4b-43a1-8d55-1bb9fc1e284f"
 	got, err := mirror.SingleObjectPath(id)
 	if err != nil || got != "singles/grid/front/7/6/"+id+".webp" {
 		t.Errorf("SingleObjectPath = %q, %v", got, err)
 	}
-	if p := mirror.SealedObjectPath("NEO", "111"); p != "sealed/NEO/111.jpg" {
+	if p := mirror.SealedObjectPath("NEO", "111"); p != "sealed/NEO/111.webp" {
 		t.Errorf("SealedObjectPath = %q", p)
 	}
 	if k := mirror.SealedKey("NEO", "111"); k != "p-NEO-111" {

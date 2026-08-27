@@ -20,7 +20,7 @@ func discardLog() *log.Logger { return log.New(io.Discard, "", 0) }
 
 func TestRunEndToEnd(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("imgbytes-" + r.URL.RawQuery))
+		w.Write(testImage("imgbytes-" + r.URL.RawQuery))
 	}))
 	defer srv.Close()
 
@@ -73,19 +73,19 @@ func TestRunSkipSealedDoesNotFetchButKeepsBundle(t *testing.T) {
 	sealedHits := 0
 	sealedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sealedHits++
-		w.Write([]byte("sealed-bytes"))
+		w.Write(testImage("sealed-bytes"))
 	}))
 	defer sealedSrv.Close()
 
 	cardSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("card-bytes"))
+		w.Write(testImage("card-bytes"))
 	}))
 	defer cardSrv.Close()
 
 	base := filepath.ToSlash(t.TempDir())
 	bucket := &simplecloud.FileBucket{}
 	sealedOnly := map[string]Image{
-		"p-NEO-111": {Key: "p-NEO-111", URL: sealedSrv.URL + "/111.jpg", ObjectPath: "sealed/NEO/111.jpg", SetCode: "NEO"},
+		"p-NEO-111": {Key: "p-NEO-111", URL: sealedSrv.URL + "/111.jpg", ObjectPath: "sealed/NEO/111.webp", SetCode: "NEO"},
 	}
 
 	// prior run actually fetches the sealed image, establishing its bundle membership
@@ -156,7 +156,7 @@ func TestRunInterruptSkipsBundlesButPersistsState(t *testing.T) {
 			<-r.Context().Done()
 			return
 		}
-		w.Write([]byte("imgbytes"))
+		w.Write(testImage("imgbytes"))
 	}))
 	defer srv.Close()
 
@@ -195,7 +195,7 @@ func TestRunRetryMissingAsksAgainForUnpublishedImages(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		w.Write([]byte("image-bytes"))
+		w.Write(testImage("image-bytes"))
 	}))
 	defer srv.Close()
 
@@ -233,7 +233,7 @@ func TestRunRetryMissingAsksAgainForUnpublishedImages(t *testing.T) {
 	if res.Pending != 1 || res.Fetched != 1 || res.NotPublished != 0 {
 		t.Errorf("res = %+v, want exactly the one previously-missing image fetched", res)
 	}
-	if _, err := os.Stat(filepath.Join(filepath.FromSlash(base), "sealed", "NEO", "111.jpg")); err != nil {
+	if _, err := os.Stat(filepath.Join(filepath.FromSlash(base), "sealed", "NEO", "111.webp")); err != nil {
 		t.Errorf("image not stored once the source published it: %v", err)
 	}
 }

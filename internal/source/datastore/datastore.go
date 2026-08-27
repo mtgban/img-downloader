@@ -12,9 +12,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/url"
-	"path"
-	"strings"
 
 	"github.com/mtgban/go-mtgban/mtgmatcher"
 	"github.com/mtgban/img-downloader/internal/mirror"
@@ -117,7 +114,6 @@ func (p *Provider) BuildWant(ctx context.Context, setsFilter map[string]bool) (s
 // datastore it could not use rather than quietly mirroring less than it should.
 type stats struct {
 	noImage     int
-	badURL      int
 	unusableID  int
 	sealedNoImg int
 }
@@ -151,8 +147,8 @@ func (p *Provider) wantFromBackend(backend *mtgmatcher.Backend, setsFilter map[s
 		}
 	}
 
-	logger.Printf("datastore: %d images wanted; skipped %d cards with no %s image, %d with an unusable URL, %d with an unusable id, %d sealed products with no image",
-		len(want), st.noImage, imageKind, st.badURL, st.unusableID, st.sealedNoImg)
+	logger.Printf("datastore: %d images wanted; skipped %d cards with no %s image, %d with an unusable id, %d sealed products with no image",
+		len(want), st.noImage, imageKind, st.unusableID, st.sealedNoImg)
 	if len(want) == 0 {
 		return nil, fmt.Errorf("datastore: %s datastore yielded no images; refusing to treat that as an empty mirror", p.game)
 	}
@@ -166,11 +162,6 @@ func (p *Provider) addSingle(want source.Want, setCode string, card mtgmatcher.C
 		st.noImage++
 		return
 	}
-	ext, ok := extensionOf(srcURL)
-	if !ok {
-		st.badURL++
-		return
-	}
 	// The key is the card's own datastore id, not the image URL's basename.
 	// Magic can use the basename because a Scryfall URL is named for the card;
 	// these games' URLs are their CDN's filenames, which name nothing the rest
@@ -182,7 +173,7 @@ func (p *Provider) addSingle(want source.Want, setCode string, card mtgmatcher.C
 	// mirrored once and a reader holding a finish uuid trims at the last
 	// underscore to find it. Mirroring per finish instead would store the
 	// same bytes two or three times over.
-	objectPath, err := mirror.GameSingleObjectPath(card.UUID, variant, ext)
+	objectPath, err := mirror.GameSingleObjectPath(card.UUID, variant)
 	if err != nil {
 		st.unusableID++
 		return
@@ -204,31 +195,11 @@ func (p *Provider) addSealed(want source.Want, setCode string, product mtgmatche
 		st.sealedNoImg++
 		return
 	}
-	ext, ok := extensionOf(srcURL)
-	if !ok {
-		st.badURL++
-		return
-	}
-	objectPath, err := mirror.GameSealedObjectPath(product.UUID, ext)
+	objectPath, err := mirror.GameSealedObjectPath(product.UUID)
 	if err != nil {
 		st.unusableID++
 		return
 	}
 	key := mirror.GameSealedKey(product.UUID)
 	want[key] = mirror.Image{Key: key, URL: srcURL, ObjectPath: objectPath, SetCode: setCode}
-}
-
-// extensionOf returns the lowercased extension of a URL's path, without the
-// dot. The mirror stores exactly the bytes the source serves and does not
-// transcode, so the stored object has to carry the source's own extension.
-func extensionOf(raw string) (string, bool) {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "", false
-	}
-	ext := strings.ToLower(strings.TrimPrefix(path.Ext(u.Path), "."))
-	if !mirror.SafeSegment(ext) {
-		return "", false
-	}
-	return ext, true
 }

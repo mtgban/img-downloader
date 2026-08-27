@@ -298,22 +298,22 @@ func TestRebuildBundlesLogsWhyASetFailed(t *testing.T) {
 	}
 }
 
-// The client decides what content type to cache an image under by reading the
-// entry's extension, and singles are webp while sealed are jpg. Naming every
-// entry after one of them would mislabel most of the corpus.
-func TestBundleEntriesKeepTheExtensionTheyAreStoredUnder(t *testing.T) {
+// Every entry is named .webp, singles and sealed alike, because every stored
+// object is one. The client reads the extension to pick a content type, so a
+// bundle that named a mix would be asking it to guess.
+func TestBundleEntriesAreAllNamedWebp(t *testing.T) {
 	base := filepath.ToSlash(t.TempDir())
 	root := filepath.FromSlash(base)
 	os.MkdirAll(filepath.Join(root, "singles", "grid", "front", "a", "b"), 0755)
 	os.MkdirAll(filepath.Join(root, "sealed", "NEO"), 0755)
 	single := "ab154b52-1234-5678-9abc-def012345678"
 	os.WriteFile(filepath.Join(root, "singles", "grid", "front", "a", "b", single+".webp"), []byte("webp"), 0644)
-	os.WriteFile(filepath.Join(root, "sealed", "NEO", "541185.jpg"), []byte("jpeg"), 0644)
+	os.WriteFile(filepath.Join(root, "sealed", "NEO", "541185.webp"), []byte("webp"), 0644)
 
 	state := State{single: {Digest: "d1", Source: "s"}, "p-NEO-541185": {Digest: "d2", Source: "s"}}
 	want := map[string]Image{
 		single:         {Key: single, ObjectPath: "singles/grid/front/a/b/" + single + ".webp", SetCode: "NEO"},
-		"p-NEO-541185": {Key: "p-NEO-541185", ObjectPath: "sealed/NEO/541185.jpg", SetCode: "NEO"},
+		"p-NEO-541185": {Key: "p-NEO-541185", ObjectPath: "sealed/NEO/541185.webp", SetCode: "NEO"},
 	}
 	manifest := Manifest{}
 	if _, err := RebuildBundles(context.Background(), &simplecloud.FileBucket{}, base, state, want, manifest, []string{"NEO"}, discardLog()); err != nil {
@@ -336,7 +336,7 @@ func TestBundleEntriesKeepTheExtensionTheyAreStoredUnder(t *testing.T) {
 	if !names[single+".webp"] {
 		t.Errorf("single stored as webp must be named .webp in the bundle; got %v", names)
 	}
-	if !names["p-NEO-541185.jpg"] {
-		t.Errorf("sealed stored as jpg must be named .jpg in the bundle; got %v", names)
+	if !names["p-NEO-541185.webp"] {
+		t.Errorf("sealed must be named .webp in the bundle like everything else; got %v", names)
 	}
 }
