@@ -29,6 +29,10 @@ on:
         description: rebuild every set bundle, ignoring the manifest
         required: false
         default: "false"
+      datastore:
+        description: datastore url for a non-Magic game (empty = the usual one for that game)
+        required: false
+        default: ""
 concurrency:
   # one run per game: two games write different prefixes and do not conflict,
   # while two runs of the same game would fight over its state document
@@ -57,6 +61,11 @@ jobs:
           B2_BUCKET_ROOT: ${{ vars.B2_BUCKET_ROOT || 'b2://mtgban-images' }}
           B2_ACCESS_KEY: ${{ secrets.B2_ACCESS_KEY }}
           B2_ACCESS_SECRET: ${{ secrets.B2_ACCESS_SECRET }}
+          # Magic builds its want-list from public bulk data; every other game
+          # reads mtgban's own datastore, the same document the website loads.
+          # The access key above has to be able to read that bucket too.
+          IMGDL_DATASTORE_EXPLICIT: ${{ inputs.datastore }}
+          IMGDL_DATASTORE_ROOT: ${{ vars.IMGDL_DATASTORE_ROOT || 'b2://mtgban-datastore' }}
           SETS: ${{ inputs.sets }}
           DRY_RUN: ${{ inputs.dry_run }}
           RETRY_MISSING: ${{ inputs.retry_missing }}
@@ -68,6 +77,13 @@ jobs:
             export B2_BUCKET="$B2_BUCKET_EXPLICIT"
           else
             export B2_BUCKET="${B2_BUCKET_ROOT}/${GAME}"
+          fi
+          if [ "$GAME" != "magic" ]; then
+            if [ -n "$IMGDL_DATASTORE_EXPLICIT" ]; then
+              export IMGDL_DATASTORE="$IMGDL_DATASTORE_EXPLICIT"
+            else
+              export IMGDL_DATASTORE="${IMGDL_DATASTORE_ROOT}/${GAME}/allCards.json"
+            fi
           fi
           FLAGS=(-game "$GAME")
           if [ -n "$SETS" ]; then FLAGS+=(-sets "$SETS"); fi

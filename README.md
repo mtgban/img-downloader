@@ -243,8 +243,8 @@ images, rather than silently doing nothing.
 `.github/workflows/mirror.yml` runs the mirror on a daily cron (minute 17
 past midnight UTC, chosen to avoid the top-of-hour scheduling drops GitHub
 documents) and can also be triggered manually via workflow_dispatch with
-`game`, `sets`, `dry_run`, `retry_missing` and `rebuild_bundles` inputs. It
-needs two repo secrets:
+`game`, `sets`, `dry_run`, `retry_missing`, `rebuild_bundles` and `datastore`
+inputs. It needs two repo secrets:
 
 - `B2_ACCESS_KEY`
 - `B2_ACCESS_SECRET`
@@ -253,6 +253,14 @@ The cron fires with `game` unset, which means Magic — the scheduled run is
 unchanged. Concurrency is grouped per game, since two games write different
 prefixes and do not conflict, while two runs of one game would fight over its
 state document.
+
+Every game but Magic also needs `IMGDL_DATASTORE`, since it builds its
+want-list from mtgban's own datastore rather than from public bulk data. That
+is derived as `$IMGDL_DATASTORE_ROOT/<game>/allCards.json`, with
+`IMGDL_DATASTORE_ROOT` defaulting to `b2://mtgban-datastore`, and the
+`datastore` input overrides it outright for one run. The same
+`B2_ACCESS_KEY` reads it, so that key needs access to the datastore bucket as
+well as the image one.
 
 `B2_BUCKET` is derived as `$B2_BUCKET_ROOT/<game>`, with `B2_BUCKET_ROOT`
 defaulting to `b2://mtgban-images`. An existing `B2_BUCKET` Actions variable
