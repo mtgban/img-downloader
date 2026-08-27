@@ -195,7 +195,7 @@ func (p *Provider) addSealed(want source.Want, setCode string, product mtgmatche
 		st.sealedNoImg++
 		return
 	}
-	objectPath, err := mirror.GameSealedObjectPath(product.UUID)
+	objectPath, err := mirror.GameSealedObjectPath(setCode, product.UUID)
 	if err != nil {
 		st.unusableID++
 		return

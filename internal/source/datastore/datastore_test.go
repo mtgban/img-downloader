@@ -132,7 +132,7 @@ func TestBuildWantSealedKeyIsSelfDescribing(t *testing.T) {
 	expect := mirror.Image{
 		Key:        "p-1-600001",
 		URL:        "https://cdn.example.invalid/sealed/box.jpg",
-		ObjectPath: "sealed/1/-/1-600001.webp",
+		ObjectPath: "sealed/1/1-600001.webp",
 		SetCode:    "1",
 	}
 	if got != expect {
