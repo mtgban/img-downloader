@@ -257,9 +257,17 @@ Every game but Magic also needs `IMGDL_DATASTORE`, since it builds its
 want-list from mtgban's own datastore rather than from public bulk data. That
 is derived as `$IMGDL_DATASTORE_ROOT/<game>/allCards.json`, with
 `IMGDL_DATASTORE_ROOT` defaulting to `b2://mtgban-datastore`, and the
-`datastore` input overrides it outright for one run. The same
-`B2_ACCESS_KEY` reads it, so that key needs access to the datastore bucket as
-well as the image one.
+`datastore` input overrides it outright for one run.
+
+The datastore is a different bucket and takes a key of its own, since a B2
+application key is scoped to a single bucket and the mirror only ever reads
+the datastore while it writes images:
+
+- `B2_DATASTORE_ACCESS_KEY`
+- `B2_DATASTORE_ACCESS_SECRET`
+
+Both are optional. Where they are unset the datastore falls back to
+`B2_ACCESS_KEY`, for a deployment running one key across both buckets.
 
 `B2_BUCKET` is derived as `$B2_BUCKET_ROOT/<game>`, with `B2_BUCKET_ROOT`
 defaulting to `b2://mtgban-images`. An existing `B2_BUCKET` Actions variable

@@ -134,7 +134,7 @@ func newProvider(ctx context.Context, game source.Game) (source.Provider, error)
 		return nil, fmt.Errorf("%s is required to mirror %s, e.g. b2://mtgban-datastore/%s/allCards.json or a local file",
 			datastoreEnv, game, game)
 	}
-	bucket, objectPath, err := openBucket(ctx, raw)
+	bucket, objectPath, err := openBucket(ctx, raw, datastoreCreds)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", datastoreEnv, err)
 	}
@@ -146,7 +146,7 @@ func newProvider(ctx context.Context, game source.Game) (source.Provider, error)
 }
 
 func run(ctx context.Context, cfg opts) error {
-	bucket, base, err := openBucket(ctx, cfg.bucket)
+	bucket, base, err := openBucket(ctx, cfg.bucket, imageCreds)
 	if err != nil {
 		return err
 	}
@@ -215,8 +215,28 @@ func parseSets(csv string) map[string]bool {
 	return out
 }
 
-// openBucket resolves raw into a bucket and its base path within it.
-func openBucket(ctx context.Context, raw string) (simplecloud.ReadWriter, string, error) {
+// credentials names the environment a bucket's B2 key pair is read from.
+//
+// The image bucket and the datastore are separate buckets with separate keys,
+// because they want separate rights: the mirror writes images and only reads
+// the datastore, and a B2 application key is scoped to one bucket anyway.
+type credentials struct{ keyEnv, secretEnv string }
+
+var (
+	imageCreds     = credentials{"B2_ACCESS_KEY", "B2_ACCESS_SECRET"}
+	datastoreCreds = credentials{"B2_DATASTORE_ACCESS_KEY", "B2_DATASTORE_ACCESS_SECRET"}
+)
+
+// read returns the pair, and whether both halves were set.
+func (c credentials) read() (string, string, bool) {
+	key := os.Getenv(c.keyEnv)
+	secret := os.Getenv(c.secretEnv)
+	return key, secret, key != "" && secret != ""
+}
+
+// openBucket resolves raw into a bucket and its base path within it, opening a
+// b2:// url with the given key pair.
+func openBucket(ctx context.Context, raw string, creds credentials) (simplecloud.ReadWriter, string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, "", err
@@ -228,10 +248,22 @@ func openBucket(ctx context.Context, raw string) (simplecloud.ReadWriter, string
 		// a one letter scheme is a Windows drive letter, e.g. C:/x
 		return nil, "", fmt.Errorf("openBucket: Windows absolute paths are not supported: %s", raw)
 	case u.Scheme == "b2":
-		key := os.Getenv("B2_ACCESS_KEY")
-		secret := os.Getenv("B2_ACCESS_SECRET")
-		if key == "" || secret == "" {
-			return nil, "", errors.New("openBucket: B2_ACCESS_KEY and B2_ACCESS_SECRET must be set for b2:// buckets")
+		key, secret, ok := creds.read()
+		if !ok {
+			// The datastore falls back to the image key, for a deployment
+			// running one key across both buckets. Naming both pairs keeps
+			// that from reading as though only one of them were an option.
+			if creds == datastoreCreds {
+				var fellBack bool
+				key, secret, fellBack = imageCreds.read()
+				if !fellBack {
+					return nil, "", fmt.Errorf("openBucket: %s and %s (or %s and %s) must be set to read a b2:// datastore",
+						datastoreCreds.keyEnv, datastoreCreds.secretEnv, imageCreds.keyEnv, imageCreds.secretEnv)
+				}
+			} else {
+				return nil, "", fmt.Errorf("openBucket: %s and %s must be set for b2:// buckets",
+					creds.keyEnv, creds.secretEnv)
+			}
 		}
 		b2Bucket, err := simplecloud.NewB2Client(ctx, key, secret, u.Host)
 		if err != nil {

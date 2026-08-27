@@ -62,8 +62,11 @@ jobs:
           B2_ACCESS_KEY: ${{ secrets.B2_ACCESS_KEY }}
           B2_ACCESS_SECRET: ${{ secrets.B2_ACCESS_SECRET }}
           # Magic builds its want-list from public bulk data; every other game
-          # reads mtgban's own datastore, the same document the website loads.
-          # The access key above has to be able to read that bucket too.
+          # reads mtgban's own datastore, which is a different bucket with a
+          # key of its own: a B2 application key is scoped to one bucket, and
+          # the mirror only reads the datastore while it writes images.
+          B2_DATASTORE_ACCESS_KEY: ${{ secrets.B2_DATASTORE_ACCESS_KEY }}
+          B2_DATASTORE_ACCESS_SECRET: ${{ secrets.B2_DATASTORE_ACCESS_SECRET }}
           IMGDL_DATASTORE_EXPLICIT: ${{ inputs.datastore }}
           IMGDL_DATASTORE_ROOT: ${{ vars.IMGDL_DATASTORE_ROOT || 'b2://mtgban-datastore' }}
           SETS: ${{ inputs.sets }}

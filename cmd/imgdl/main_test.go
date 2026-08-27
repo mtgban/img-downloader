@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"reflect"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func TestParseSetsUppercases(t *testing.T) {
 }
 
 func TestOpenBucketLocalDir(t *testing.T) {
-	bucket, base, err := openBucket(context.Background(), "./tmp-mirror")
+	bucket, base, err := openBucket(context.Background(), "./tmp-mirror", imageCreds)
 	if err != nil {
 		t.Fatalf("openBucket local dir: %v", err)
 	}
@@ -40,7 +41,7 @@ func TestOpenBucketLocalDir(t *testing.T) {
 }
 
 func TestOpenBucketRejectsWindowsAbsolutePath(t *testing.T) {
-	_, _, err := openBucket(context.Background(), "C:/x")
+	_, _, err := openBucket(context.Background(), "C:/x", imageCreds)
 	if err == nil {
 		t.Fatal("openBucket(C:/x) = nil error, want rejection")
 	}
@@ -49,7 +50,7 @@ func TestOpenBucketRejectsWindowsAbsolutePath(t *testing.T) {
 func TestOpenBucketB2RequiresCreds(t *testing.T) {
 	t.Setenv("B2_ACCESS_KEY", "")
 	t.Setenv("B2_ACCESS_SECRET", "")
-	_, _, err := openBucket(context.Background(), "b2://mybucket/prefix")
+	_, _, err := openBucket(context.Background(), "b2://mybucket/prefix", imageCreds)
 	if err == nil {
 		t.Fatal("openBucket(b2://... without creds) = nil error, want error")
 	}
@@ -131,5 +132,61 @@ func TestNewProviderDatastoreGameFromLocalPath(t *testing.T) {
 	}
 	if _, ok := p.(source.SealedAware); !ok {
 		t.Error("datastore provider should be sealed aware")
+	}
+}
+
+// The datastore is a different bucket from the image one and wants a key of
+// its own, since a B2 application key is scoped to a single bucket and the
+// mirror only ever reads the datastore while it writes images.
+func TestOpenBucketUsesTheDatastoreKeyForTheDatastore(t *testing.T) {
+	t.Setenv("B2_ACCESS_KEY", "")
+	t.Setenv("B2_ACCESS_SECRET", "")
+	t.Setenv("B2_DATASTORE_ACCESS_KEY", "")
+	t.Setenv("B2_DATASTORE_ACCESS_SECRET", "")
+
+	_, _, err := openBucket(context.Background(), "b2://mtgban-datastore/lorcana/allCards.json", datastoreCreds)
+	if err == nil {
+		t.Fatal("opening a datastore with no credentials at all = nil error, want an error")
+	}
+	for _, want := range []string{"B2_DATASTORE_ACCESS_KEY", "B2_ACCESS_KEY"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %s, so it does not say what to set:\n%v", want, err)
+		}
+	}
+}
+
+// A deployment running one key across both buckets keeps working: the
+// datastore falls back to the image pair rather than requiring a second one
+// that would be the same value twice.
+func TestOpenBucketFallsBackToTheImageKey(t *testing.T) {
+	t.Setenv("B2_DATASTORE_ACCESS_KEY", "")
+	t.Setenv("B2_DATASTORE_ACCESS_SECRET", "")
+	t.Setenv("B2_ACCESS_KEY", "")
+	t.Setenv("B2_ACCESS_SECRET", "")
+
+	// with only the image pair set, the failure is no longer about credentials
+	t.Setenv("B2_ACCESS_KEY", "k")
+	t.Setenv("B2_ACCESS_SECRET", "s")
+	_, _, err := openBucket(context.Background(), "b2://mtgban-datastore/lorcana/allCards.json", datastoreCreds)
+	if err != nil && strings.Contains(err.Error(), "must be set") {
+		t.Errorf("image credentials were not used as a fallback: %v", err)
+	}
+}
+
+// The image bucket has no fallback to fall back to, so its error names its own
+// pair and nothing else.
+func TestOpenBucketImageCredentialsHaveNoFallback(t *testing.T) {
+	t.Setenv("B2_ACCESS_KEY", "")
+	t.Setenv("B2_ACCESS_SECRET", "")
+
+	_, _, err := openBucket(context.Background(), "b2://mtgban-images/magic", imageCreds)
+	if err == nil {
+		t.Fatal("opening the image bucket with no credentials = nil error, want an error")
+	}
+	if !strings.Contains(err.Error(), "B2_ACCESS_KEY") {
+		t.Errorf("error does not name the image key pair:\n%v", err)
+	}
+	if strings.Contains(err.Error(), "DATASTORE") {
+		t.Errorf("error offers a datastore key for the image bucket:\n%v", err)
 	}
 }
