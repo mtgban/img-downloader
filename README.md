@@ -405,9 +405,12 @@ of permanently missing sealed images cannot block bundling forever.
 ### Images the source never published
 
 A 404 or 410 means the host answered and has no image at that URL, which for
-a given URL is permanent — unlike a timeout or a 5xx. Those are recorded in
-state with `"missing": true` and no digest, so `NeedFetch` skips them on
-later runs. Without that, every one would be re-requested on every run
+a given URL is permanent — unlike a timeout or a 5xx. So does a response
+whose body is not an image: TCGplayer answers a missing product image with a
+70 byte "Not Found" page under HTTP 200 and a `Content-Type` of `image/jpeg`,
+so the status code says nothing and the body is the only honest part of it.
+Both are recorded in state with `"missing": true` and no digest, so
+`NeedFetch` skips them on later runs. Without that, every one would be re-requested on every run
 forever: roughly 840 doomed requests a day, about 84 seconds of a run, and a
 wall of alarming log lines each morning for images that are simply not
 coming. They are logged as a count rather than a line each, are reported as

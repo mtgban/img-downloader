@@ -547,3 +547,59 @@ func TestFetchRunLeavesNotPublishedToItsCount(t *testing.T) {
 		t.Errorf("not-published was logged as a failure:\n%s", buf.String())
 	}
 }
+
+// TCGplayer answers a missing product image with a "Not Found" page under HTTP
+// 200 and a Content-Type of image/jpeg, so the status code cannot be trusted
+// and the body is the only honest part of the response.
+func TestFetchRunTreatsAnUndecodableSourceAsNotPublished(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("<html><h1>Not Found</h1></html>"))
+	}))
+	defer srv.Close()
+
+	var buf bytes.Buffer
+	f := testFetcher(t)
+	f.log = log.New(&buf, "", 0)
+	want := map[string]Image{
+		"p-ZNR-220420": {Key: "p-ZNR-220420", URL: srv.URL + "/220420.jpg", ObjectPath: "sealed/ZNR/220420.webp", SetCode: "ZNR"},
+	}
+	_, failed, err := f.run(context.Background(), want, []string{"p-ZNR-220420"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed != 0 {
+		t.Errorf("failed = %d, want 0 - a source with no image is not a failure", failed)
+	}
+	entry, found := f.state["p-ZNR-220420"]
+	if !found || !entry.Missing {
+		t.Fatalf("state entry = %+v, want a not-published marker", entry)
+	}
+	if entry.Digest != "" {
+		t.Errorf("digest = %q, want none - nothing was stored", entry.Digest)
+	}
+}
+
+// The marker is what unblocks the set: SetDigests skips it, so the rebuild
+// never asks the bucket for the object that was never written. Without this a
+// single product with no artwork took its whole set's bundle down on every run.
+func TestUndecodableSourceLeavesItsSetBundleable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Write([]byte("<html><h1>Not Found</h1></html>"))
+	}))
+	defer srv.Close()
+
+	f := testFetcher(t)
+	f.log = log.New(io.Discard, "", 0)
+	bad := Image{Key: "p-ZNR-220420", URL: srv.URL + "/220420.jpg", ObjectPath: "sealed/ZNR/220420.webp", SetCode: "ZNR"}
+	want := map[string]Image{bad.Key: bad}
+	if _, _, err := f.run(context.Background(), want, []string{bad.Key}); err != nil {
+		t.Fatal(err)
+	}
+
+	if digests := SetDigests(f.state, want); len(digests["ZNR"]) != 0 {
+		t.Errorf("ZNR digests = %v, want the unpublished image excluded", digests["ZNR"])
+	}
+}
