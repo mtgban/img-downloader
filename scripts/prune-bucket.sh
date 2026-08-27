@@ -20,6 +20,7 @@
 set -euo pipefail
 
 BASE=${BASE:-b2://mtgban-images/magic}
+JOBS=${JOBS:-16}
 APPLY=0
 KEEP=0
 
@@ -96,22 +97,24 @@ ids() { sed -e 's|.*/||' -e 's|\.[^.]*$||'; }
 # orphans <listfile> <replacements-listfile> <label>
 # Splits an old-layout listing into what is safe to delete (its replacement
 # exists) and what is not (it does not, so this is still the only copy).
+#
+# Done as two joins over sorted files rather than a lookup per object. The
+# corpus is ~120k objects against ~120k ids, so the per-object form is O(n*m)
+# and does not finish in any useful time.
 orphans() {
     local old=$1 live=$2 label=$3
+    local tab
+    tab=$(printf '\t')
+
     ids < "$live" | LC_ALL=C sort -u > "$WORK/.live-ids"
-    : > "$WORK/.del"; : > "$WORK/.hold"
-    while IFS= read -r obj; do
-        [ -n "$obj" ] || continue
-        local id
-        id=$(printf '%s' "$obj" | ids)
-        if LC_ALL=C grep -qxF "$id" "$WORK/.live-ids"; then
-            printf '%s\n' "$obj" >> "$WORK/.del"
-        else
-            printf '%s\n' "$obj" >> "$WORK/.hold"
-        fi
-    done < "$old"
-    mv "$WORK/.del" "$WORK/$label.delete.txt"
-    mv "$WORK/.hold" "$WORK/$label.hold.txt"
+    # "<id>\t<object>", sorted on the id, which is what both joins key on
+    awk -F/ '{ n = $NF; sub(/\.[^.]*$/, "", n); print n "\t" $0 }' "$old" \
+        | LC_ALL=C sort -t "$tab" -k1,1 > "$WORK/.old-by-id"
+
+    LC_ALL=C join -t "$tab" -o 1.2 "$WORK/.old-by-id" "$WORK/.live-ids" \
+        > "$WORK/$label.delete.txt"
+    LC_ALL=C join -t "$tab" -v 1 -o 1.2 "$WORK/.old-by-id" "$WORK/.live-ids" \
+        > "$WORK/$label.hold.txt"
 }
 
 report() {
@@ -193,18 +196,28 @@ if [ "$APPLY" != 1 ]; then
 fi
 
 # ----------------------------------------------------------------- deleting --
+# One b2 invocation per object, in parallel: each one pays process startup and
+# authentication before it makes an API call, so serially this is hours at the
+# sizes involved rather than minutes.
 rule
-say "deleting $TOTAL objects..."
-FAILED=0
-while IFS= read -r obj; do
-    [ -n "$obj" ] || continue
-    if ! b2 rm --quiet "$BASE/$obj" >/dev/null 2>&1; then
-        if ! b2 file rm "$BASE/$obj" >/dev/null 2>&1; then
-            printf 'failed: %s\n' "$obj" >&2
-            FAILED=$((FAILED + 1))
-        fi
-    fi
-done < "$WORK/all.delete.txt"
+say "deleting $TOTAL objects with $JOBS workers; this is the slow part..."
+
+rm_one() {
+    b2 rm --quiet "$BASE/$1" >/dev/null 2>&1 && return 0
+    b2 file rm "$BASE/$1" >/dev/null 2>&1 && return 0
+    printf '%s\n' "$1"
+}
+export -f rm_one
+export BASE
+
+xargs -P "$JOBS" -I {} bash -c 'rm_one "$@"' _ {} \
+    < "$WORK/all.delete.txt" > "$WORK/failed.txt"
+
+FAILED=$(wc -l < "$WORK/failed.txt" | tr -d ' ')
+if [ "$FAILED" -gt 0 ]; then
+    say "objects that would not delete:"
+    head -5 "$WORK/failed.txt" | sed 's/^/  /'
+fi
 
 say "done. deleted $((TOTAL - FAILED)), failed $FAILED"
 [ "$FAILED" -eq 0 ]
