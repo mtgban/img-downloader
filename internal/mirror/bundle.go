@@ -44,6 +44,7 @@ func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base str
 	var saveMu sync.Mutex
 	rebuilt := 0
 	completed := 0
+	removed := 0
 	var failed []string
 
 	work := make(chan string)
@@ -78,9 +79,16 @@ func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base str
 				}
 
 				mu.Lock()
+				// The entry being replaced names the object the new bundle
+				// supersedes, and it is the only record of it: nothing else
+				// remembers a hash once the manifest stops naming it.
+				var superseded string
 				if err != nil {
 					failed = append(failed, code)
 				} else {
+					if prev, found := manifest[code]; found && prev.Hash != "" && prev.Hash != info.Hash {
+						superseded = BundleObjectPath(code, prev.Hash)
+					}
 					manifest[code] = info
 					rebuilt++
 				}
@@ -104,6 +112,25 @@ func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base str
 				}
 				mu.Unlock()
 
+				// Outside the lock: this is a network round trip, and holding
+				// the manifest for it would serialise every worker behind it.
+				//
+				// A bundle nothing points at is dead weight of roughly the
+				// size of the set it covers, since bundles are stored
+				// uncompressed, and until now nothing ever removed one. Losing
+				// the delete is not worth failing a rebuild that may have run
+				// for hours: a client asking for a bundle that is gone treats
+				// it as one the mirror has not published and moves on.
+				if superseded != "" {
+					if err := deleteObject(ctx, bucket, JoinPath(base, superseded)); err != nil {
+						logger.Printf("could not remove superseded bundle %s: %v", superseded, err)
+					} else {
+						mu.Lock()
+						removed++
+						mu.Unlock()
+					}
+				}
+
 				if report {
 					logger.Printf("rebuilt %d/%d bundles", n, len(codes))
 				}
@@ -118,6 +145,10 @@ func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base str
 		}()
 	}
 	wg.Wait()
+
+	if removed > 0 {
+		logger.Printf("removed %d superseded bundles", removed)
+	}
 
 	if ctx.Err() != nil {
 		logger.Printf("interrupted after %d of %d bundles", completed, len(codes))

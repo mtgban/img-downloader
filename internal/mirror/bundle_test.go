@@ -340,3 +340,87 @@ func TestBundleEntriesAreAllNamedWebp(t *testing.T) {
 		t.Errorf("sealed must be named .webp in the bundle like everything else; got %v", names)
 	}
 }
+
+// supersededFixture sets up one set with one image and returns its base, a
+// runnable rebuild, and the object path of whatever bundle currently exists.
+func supersededFixture(t *testing.T, digest string) (string, State, map[string]Image) {
+	t.Helper()
+	base := filepath.ToSlash(t.TempDir())
+	root := filepath.FromSlash(base)
+	single := "ab154b52-1234-5678-9abc-def012345678"
+	os.MkdirAll(filepath.Join(root, "singles", "grid", "front", "a", "b"), 0755)
+	os.WriteFile(filepath.Join(root, "singles", "grid", "front", "a", "b", single+".webp"), []byte("webp"), 0644)
+
+	state := State{single: {Digest: digest, Source: "s"}}
+	want := map[string]Image{
+		single: {Key: single, ObjectPath: "singles/grid/front/a/b/" + single + ".webp", SetCode: "NEO"},
+	}
+	return base, state, want
+}
+
+func bundleExists(t *testing.T, base, code, hash string) bool {
+	t.Helper()
+	_, err := os.Stat(filepath.FromSlash(JoinPath(base, BundleObjectPath(code, hash))))
+	return err == nil
+}
+
+// Nothing had ever removed a bundle, so every rebuild left a whole generation
+// behind. They are stored uncompressed, so a stale generation costs about what
+// the set it covers costs.
+func TestRebuildBundlesRemovesTheBundleItSupersedes(t *testing.T) {
+	base, state, want := supersededFixture(t, "d1")
+	manifest := Manifest{}
+	if _, err := RebuildBundles(context.Background(), &simplecloud.FileBucket{}, base, state, want, manifest, []string{"NEO"}, discardLog()); err != nil {
+		t.Fatal(err)
+	}
+	first := manifest["NEO"].Hash
+	if !bundleExists(t, base, "NEO", first) {
+		t.Fatalf("first bundle %q was not written", first)
+	}
+
+	// a changed digest changes the bundle hash, so the first one is superseded
+	state[want[keysOf(want)[0]].Key] = StateEntry{Digest: "d2", Source: "s"}
+	if _, err := RebuildBundles(context.Background(), &simplecloud.FileBucket{}, base, state, want, manifest, []string{"NEO"}, discardLog()); err != nil {
+		t.Fatal(err)
+	}
+	second := manifest["NEO"].Hash
+	if second == first {
+		t.Fatal("hash did not change, so this test proves nothing")
+	}
+	if !bundleExists(t, base, "NEO", second) {
+		t.Error("the new bundle is missing")
+	}
+	if bundleExists(t, base, "NEO", first) {
+		t.Error("the superseded bundle was left behind")
+	}
+}
+
+// A rebuild that produces the same hash writes to the path the manifest
+// already names. Treating that as superseded would delete the bundle the run
+// had just written and leave the manifest pointing at nothing.
+func TestRebuildBundlesKeepsAnUnchangedBundle(t *testing.T) {
+	base, state, want := supersededFixture(t, "d1")
+	manifest := Manifest{}
+	if _, err := RebuildBundles(context.Background(), &simplecloud.FileBucket{}, base, state, want, manifest, []string{"NEO"}, discardLog()); err != nil {
+		t.Fatal(err)
+	}
+	hash := manifest["NEO"].Hash
+
+	if _, err := RebuildBundles(context.Background(), &simplecloud.FileBucket{}, base, state, want, manifest, []string{"NEO"}, discardLog()); err != nil {
+		t.Fatal(err)
+	}
+	if manifest["NEO"].Hash != hash {
+		t.Fatalf("hash changed to %q, so this test proves nothing", manifest["NEO"].Hash)
+	}
+	if !bundleExists(t, base, "NEO", hash) {
+		t.Error("the rebuild deleted the bundle it had just written")
+	}
+}
+
+func keysOf(want map[string]Image) []string {
+	out := make([]string, 0, len(want))
+	for k := range want {
+		out = append(out, k)
+	}
+	return out
+}
