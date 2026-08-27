@@ -493,3 +493,57 @@ func TestFetchAllStaysQuietWithinTheInterval(t *testing.T) {
 		t.Errorf("missing the final summary, got:\n%s", out)
 	}
 }
+
+// A failed fetch used to reach the closing summary as a count and nothing
+// else, so one image failing out of thousands could not be identified — and
+// the bundle it goes on to break names a set, not an image.
+func TestFetchRunNamesTheImageThatFailed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	var buf bytes.Buffer
+	f := testFetcher(t)
+	f.log = log.New(&buf, "", 0)
+	want := map[string]Image{
+		"p-ZNR-9": {Key: "p-ZNR-9", URL: srv.URL + "/9.jpg", ObjectPath: "sealed/ZNR/9.webp", SetCode: "ZNR"},
+	}
+	_, failed, _ := f.run(context.Background(), want, []string{"p-ZNR-9"})
+
+	if failed != 1 {
+		t.Fatalf("failed = %d, want 1", failed)
+	}
+	logged := buf.String()
+	if !strings.Contains(logged, "p-ZNR-9") {
+		t.Errorf("log does not name the image that failed:\n%s", logged)
+	}
+	if !strings.Contains(logged, srv.URL) {
+		t.Errorf("log does not say where it was fetching from:\n%s", logged)
+	}
+}
+
+// The source answering that it has no image is the expected outcome for
+// hundreds of products, so those stay a count; naming each one would bury the
+// failures that do want acting on.
+func TestFetchRunLeavesNotPublishedToItsCount(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	var buf bytes.Buffer
+	f := testFetcher(t)
+	f.log = log.New(&buf, "", 0)
+	want := map[string]Image{
+		"p-ZNR-9": {Key: "p-ZNR-9", URL: srv.URL + "/9.jpg", ObjectPath: "sealed/ZNR/9.webp", SetCode: "ZNR"},
+	}
+	_, failed, _ := f.run(context.Background(), want, []string{"p-ZNR-9"})
+
+	if failed != 0 {
+		t.Fatalf("failed = %d, want 0 - a 404 is not published, not a failure", failed)
+	}
+	if strings.Contains(buf.String(), "failed") {
+		t.Errorf("not-published was logged as a failure:\n%s", buf.String())
+	}
+}
