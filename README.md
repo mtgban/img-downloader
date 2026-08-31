@@ -420,7 +420,12 @@ of permanently missing sealed images cannot block bundling forever.
 ### Images the source never published
 
 A 404 or 410 means the host answered and has no image at that URL, which for
-a given URL is permanent — unlike a timeout or a 5xx. So does a response
+a given URL is permanent — unlike a timeout or a 5xx. So does a 403: a bucket
+fronted without public ListBucket answers a key that is not there with
+AccessDenied rather than Not Found, which is how TCGplayer's CDN reports a
+product it holds no artwork for. A 403 that really is the host refusing us
+outright would be every request rather than one in seven, and that trips the
+consecutive-failure breaker, which takes back every marker the streak wrote. So does a response
 whose body is not an image: TCGplayer answers a missing product image with a
 70 byte "Not Found" page under HTTP 200 and a `Content-Type` of `image/jpeg`,
 so the status code says nothing and the body is the only honest part of it.

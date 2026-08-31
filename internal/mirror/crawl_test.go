@@ -603,3 +603,63 @@ func TestUndecodableSourceLeavesItsSetBundleable(t *testing.T) {
 		t.Errorf("ZNR digests = %v, want the unpublished image excluded", digests["ZNR"])
 	}
 }
+
+// A bucket fronted without public ListBucket answers a key that is not there
+// with 403 AccessDenied rather than 404. TCGplayer's CDN does this: a Riftbound
+// run met 235 of them, each a product it holds no artwork for, and every one
+// counted as a failure that failed the run.
+func TestFetchRunTreatsForbiddenAsNotPublished(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code></Error>`))
+	}))
+	defer srv.Close()
+
+	f := testFetcher(t)
+	f.log = log.New(io.Discard, "", 0)
+	want := map[string]Image{
+		"ven-709917": {Key: "ven-709917", URL: srv.URL + "/product/709917_400w.jpg", ObjectPath: "singles/full/front/v/e/ven-709917.webp", SetCode: "VEN"},
+	}
+	_, failed, err := f.run(context.Background(), want, []string{"ven-709917"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed != 0 {
+		t.Errorf("failed = %d, want 0 - the host answered that it has no image", failed)
+	}
+	entry, found := f.state["ven-709917"]
+	if !found || !entry.Missing {
+		t.Fatalf("state entry = %+v, want a not-published marker", entry)
+	}
+}
+
+// The ambiguity in 403 is a host refusing every request rather than one object.
+// That is what the consecutive-failure breaker is for: it aborts the run and
+// takes back the markers the streak wrote, so an outage cannot retire a corpus.
+func TestForbiddenEverywhereTripsTheBreakerAndKeepsNothing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	f := testFetcher(t)
+	f.log = log.New(io.Discard, "", 0)
+	f.maxConsecutive = 5
+
+	want := map[string]Image{}
+	var keys []string
+	for i := 0; i < 20; i++ {
+		key := fmt.Sprintf("ven-%d", i)
+		want[key] = Image{Key: key, URL: fmt.Sprintf("%s/product/%d.jpg", srv.URL, i), ObjectPath: "singles/full/front/v/e/" + key + ".webp", SetCode: "VEN"}
+		keys = append(keys, key)
+	}
+	_, _, err := f.run(context.Background(), want, keys)
+	if !errors.Is(err, ErrTooManyFailures) {
+		t.Fatalf("err = %v, want ErrTooManyFailures", err)
+	}
+	for key, entry := range f.state {
+		if entry.Missing {
+			t.Errorf("%s kept a not-published marker written during the streak that tripped the breaker", key)
+		}
+	}
+}

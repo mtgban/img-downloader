@@ -46,6 +46,27 @@ const (
 // request, as opposed to one merely missing the occasional image.
 var ErrTooManyFailures = errors.New("mirror: source failing persistently")
 
+// isNotPublishedStatus reports whether a status means the host answered and
+// has no image at this URL.
+//
+// 404 and 410 say so plainly. 403 is here because a bucket fronted without
+// public ListBucket answers a key that is not there with AccessDenied rather
+// than Not Found, which is how TCGplayer's CDN reports a product it holds no
+// artwork for: 709917 is 403 while 635366, 693377 and 697969 beside it are
+// 200, so the refusal is per object rather than of the host.
+//
+// A 403 that really is the host refusing us outright would be every request,
+// not one in seven, and that trips the consecutive-failure breaker, which
+// takes back the markers the streak wrote. So the ambiguity costs a run that
+// aborts and reports why, rather than a corpus quietly retired.
+func isNotPublishedStatus(status int) bool {
+	switch status {
+	case http.StatusNotFound, http.StatusGone, http.StatusForbidden:
+		return true
+	}
+	return false
+}
+
 // notPublishedError is a source answering that it has no image at this URL.
 // Permanent for that URL, unlike a transport error or a 5xx.
 type notPublishedError struct{ status int }
@@ -393,7 +414,7 @@ func (f *fetcher) download(ctx context.Context, host, srcURL string) ([]byte, er
 			}
 		default:
 			resp.Body.Close()
-			if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
+			if isNotPublishedStatus(resp.StatusCode) {
 				return nil, notPublishedError{resp.StatusCode}
 			}
 			return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
