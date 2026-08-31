@@ -255,7 +255,7 @@ state document.
 
 Every game but Magic also needs `IMGDL_DATASTORE`, since it builds its
 want-list from mtgban's own datastore rather than from public bulk data. That
-is derived as `$IMGDL_DATASTORE_ROOT/<game>/allCards.json`, with
+is derived as `$IMGDL_DATASTORE_ROOT/<game>/<game>.json.xz`, with
 `IMGDL_DATASTORE_ROOT` defaulting to `b2://mtgban-datastore`, and the
 `datastore` input overrides it outright for one run.
 

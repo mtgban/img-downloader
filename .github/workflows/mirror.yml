@@ -85,7 +85,9 @@ jobs:
             if [ -n "$IMGDL_DATASTORE_EXPLICIT" ]; then
               export IMGDL_DATASTORE="$IMGDL_DATASTORE_EXPLICIT"
             else
-              export IMGDL_DATASTORE="${IMGDL_DATASTORE_ROOT}/${GAME}/allCards.json"
+              # every game's datastore is <game>/<game>.json.xz; only Magic
+              # is named differently, and Magic never reads one
+              export IMGDL_DATASTORE="${IMGDL_DATASTORE_ROOT}/${GAME}/${GAME}.json.xz"
             fi
           fi
           FLAGS=(-game "$GAME")
