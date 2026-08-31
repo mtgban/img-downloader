@@ -131,8 +131,8 @@ func newProvider(ctx context.Context, game source.Game) (source.Provider, error)
 
 	raw := os.Getenv(datastoreEnv)
 	if raw == "" {
-		return nil, fmt.Errorf("%s is required to mirror %s, e.g. b2://mtgban-datastore/%s/allCards.json or a local file",
-			datastoreEnv, game, game)
+		return nil, fmt.Errorf("%s is required to mirror %s, e.g. b2://mtgban-datastore/%s/%s.json.xz or a local file",
+			datastoreEnv, game, game, game)
 	}
 	bucket, objectPath, err := openBucket(ctx, raw, datastoreCreds)
 	if err != nil {
