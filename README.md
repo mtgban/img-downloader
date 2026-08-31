@@ -229,13 +229,22 @@ images, rather than silently doing nothing.
 - `B2_ACCESS_KEY`, `B2_ACCESS_SECRET`: required when `B2_BUCKET` uses the
   `b2://` scheme. Not read from any config file, env only.
 - `IMGDL_GAME`: default for `-game`.
-- `IMGDL_DATASTORE`: required for every game except Magic. The datastore
-  document to build the want-list from, either `b2://name/path/to/doc.json.xz`
-  or a local file. This is the counterpart of the website's `datastore_path`
-  config key, and it is a separate location from the image bucket: the
-  datastore is the site's data, not the mirror's. `.xz` and `.gz` suffixes are
-  decompressed by simplecloud on the way in. When it names a `b2://` bucket it
-  reuses `B2_ACCESS_KEY`/`B2_ACCESS_SECRET`.
+- `IMGDL_DATASTORE`: optional override of where a non-Magic game's datastore
+  document is. Normally unset: the location is derived from the game as
+  `$IMGDL_DATASTORE_ROOT/<game>/allCards.json`, so a run only has to be told
+  which game it is mirroring. Set it for a local file or a document filed
+  somewhere the convention does not put it. This is the counterpart of the
+  website's `datastore_path` config key, and it is a separate location from
+  the image bucket: the datastore is the site's data, not the mirror's. `.xz`
+  and `.gz` suffixes are decompressed by simplecloud on the way in.
+- `IMGDL_DATASTORE_ROOT`: the prefix every game's datastore hangs off,
+  defaulting to `b2://mtgban-datastore`. Moves every game at once, for a
+  different datastore bucket or a local tree of them.
+- `B2_DATASTORE_ACCESS_KEY` / `B2_DATASTORE_ACCESS_SECRET`: the key pair the
+  datastore bucket is read with. A B2 application key is scoped to one bucket,
+  so this cannot be the image key; where they are unset it falls back to
+  `B2_ACCESS_KEY`/`B2_ACCESS_SECRET`, for a deployment running one key across
+  both.
 
 ## GitHub Action
 
@@ -253,11 +262,11 @@ unchanged. Concurrency is grouped per game, since two games write different
 prefixes and do not conflict, while two runs of one game would fight over its
 state document.
 
-Every game but Magic also needs `IMGDL_DATASTORE`, since it builds its
-want-list from mtgban's own datastore rather than from public bulk data. That
-is derived as `$IMGDL_DATASTORE_ROOT/<game>/allCards.json`, with
-`IMGDL_DATASTORE_ROOT` defaulting to `b2://mtgban-datastore`, and the
-`datastore` input overrides it outright for one run.
+Every game but Magic reads mtgban's own datastore rather than public bulk
+data, and imgdl works out where that is from the game it was given:
+`$IMGDL_DATASTORE_ROOT/<game>/allCards.json`, with `IMGDL_DATASTORE_ROOT`
+defaulting to `b2://mtgban-datastore`. Neither is normally set on the
+workflow; the `datastore` input overrides the whole location for one run.
 
 The datastore is a different bucket and takes a key of its own, since a B2
 application key is scoped to a single bucket and the mirror only ever reads
@@ -277,9 +286,12 @@ automatically, no workflow edits needed. Pointing that override at one game's
 prefix and then dispatching another game fails on the `mirror-game.json`
 claim rather than corrupting either mirror.
 
-Mirroring a game other than Magic also needs `IMGDL_DATASTORE` for that game,
-which the workflow does not yet set — see the open cross-repo questions
-below.
+Mirroring a game other than Magic reads that game's datastore, whose location
+imgdl derives from the game itself. The workflow passes neither
+`IMGDL_DATASTORE` nor `IMGDL_DATASTORE_ROOT` unless a run needs to override
+one, but it does need `B2_DATASTORE_ACCESS_KEY` and
+`B2_DATASTORE_ACCESS_SECRET` as repo secrets, since the datastore is a
+different bucket from the images and a B2 key opens only one.
 
 The job's `timeout-minutes` is 350, just under the 360 minute ceiling GitHub
 enforces on hosted runners. Steady-state daily runs finish in minutes. The

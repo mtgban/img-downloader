@@ -67,8 +67,11 @@ jobs:
           # the mirror only reads the datastore while it writes images.
           B2_DATASTORE_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY_ID_DATASTORE }}
           B2_DATASTORE_ACCESS_SECRET: ${{ secrets.B2_APPLICATION_KEY_DATASTORE }}
-          IMGDL_DATASTORE_EXPLICIT: ${{ inputs.datastore }}
-          IMGDL_DATASTORE_ROOT: ${{ vars.IMGDL_DATASTORE_ROOT || 'b2://mtgban-datastore' }}
+          # imgdl derives <root>/<game>/allCards.json from the game it is
+          # given, so neither of these is normally set: the root only for a
+          # different datastore bucket, the override only for one odd run.
+          IMGDL_DATASTORE: ${{ inputs.datastore }}
+          IMGDL_DATASTORE_ROOT: ${{ vars.IMGDL_DATASTORE_ROOT }}
           SETS: ${{ inputs.sets }}
           DRY_RUN: ${{ inputs.dry_run }}
           RETRY_MISSING: ${{ inputs.retry_missing }}
@@ -80,13 +83,6 @@ jobs:
             export B2_BUCKET="$B2_BUCKET_EXPLICIT"
           else
             export B2_BUCKET="${B2_BUCKET_ROOT}/${GAME}"
-          fi
-          if [ "$GAME" != "magic" ]; then
-            if [ -n "$IMGDL_DATASTORE_EXPLICIT" ]; then
-              export IMGDL_DATASTORE="$IMGDL_DATASTORE_EXPLICIT"
-            else
-              export IMGDL_DATASTORE="${IMGDL_DATASTORE_ROOT}/${GAME}/allCards.json"
-            fi
           fi
           FLAGS=(-game "$GAME")
           if [ -n "$SETS" ]; then FLAGS+=(-sets "$SETS"); fi

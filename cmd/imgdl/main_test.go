@@ -138,15 +138,15 @@ func TestNewProviderDatastoreGameFromLocalPath(t *testing.T) {
 // The datastore is a different bucket from the image one and wants a key of
 // its own, since a B2 application key is scoped to a single bucket and the
 // mirror only ever reads the datastore while it writes images.
-func TestOpenBucketUsesTheDatastoreKeyForTheDatastore(t *testing.T) {
+func TestResolveCredentialsNamesBothPairsForTheDatastore(t *testing.T) {
 	t.Setenv("B2_ACCESS_KEY", "")
 	t.Setenv("B2_ACCESS_SECRET", "")
 	t.Setenv("B2_DATASTORE_ACCESS_KEY", "")
 	t.Setenv("B2_DATASTORE_ACCESS_SECRET", "")
 
-	_, _, err := openBucket(context.Background(), "b2://mtgban-datastore/lorcana/allCards.json", datastoreCreds)
+	_, _, err := resolveCredentials(datastoreCreds)
 	if err == nil {
-		t.Fatal("opening a datastore with no credentials at all = nil error, want an error")
+		t.Fatal("no credentials at all = nil error, want an error")
 	}
 	for _, want := range []string{"B2_DATASTORE_ACCESS_KEY", "B2_ACCESS_KEY"} {
 		if !strings.Contains(err.Error(), want) {
@@ -155,38 +155,99 @@ func TestOpenBucketUsesTheDatastoreKeyForTheDatastore(t *testing.T) {
 	}
 }
 
-// A deployment running one key across both buckets keeps working: the
-// datastore falls back to the image pair rather than requiring a second one
-// that would be the same value twice.
-func TestOpenBucketFallsBackToTheImageKey(t *testing.T) {
-	t.Setenv("B2_DATASTORE_ACCESS_KEY", "")
-	t.Setenv("B2_DATASTORE_ACCESS_SECRET", "")
-	t.Setenv("B2_ACCESS_KEY", "")
-	t.Setenv("B2_ACCESS_SECRET", "")
+// Its own pair wins where it is set, so the two buckets stay separable.
+func TestResolveCredentialsPrefersTheDatastorePair(t *testing.T) {
+	t.Setenv("B2_ACCESS_KEY", "image-key")
+	t.Setenv("B2_ACCESS_SECRET", "image-secret")
+	t.Setenv("B2_DATASTORE_ACCESS_KEY", "ds-key")
+	t.Setenv("B2_DATASTORE_ACCESS_SECRET", "ds-secret")
 
-	// with only the image pair set, the failure is no longer about credentials
-	t.Setenv("B2_ACCESS_KEY", "k")
-	t.Setenv("B2_ACCESS_SECRET", "s")
-	_, _, err := openBucket(context.Background(), "b2://mtgban-datastore/lorcana/allCards.json", datastoreCreds)
-	if err != nil && strings.Contains(err.Error(), "must be set") {
-		t.Errorf("image credentials were not used as a fallback: %v", err)
+	key, secret, err := resolveCredentials(datastoreCreds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key != "ds-key" || secret != "ds-secret" {
+		t.Errorf("resolved %q/%q, want the datastore pair", key, secret)
 	}
 }
 
-// The image bucket has no fallback to fall back to, so its error names its own
-// pair and nothing else.
-func TestOpenBucketImageCredentialsHaveNoFallback(t *testing.T) {
+// A deployment running one key across both buckets keeps working.
+func TestResolveCredentialsFallsBackToTheImagePair(t *testing.T) {
+	t.Setenv("B2_DATASTORE_ACCESS_KEY", "")
+	t.Setenv("B2_DATASTORE_ACCESS_SECRET", "")
+	t.Setenv("B2_ACCESS_KEY", "image-key")
+	t.Setenv("B2_ACCESS_SECRET", "image-secret")
+
+	key, secret, err := resolveCredentials(datastoreCreds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key != "image-key" || secret != "image-secret" {
+		t.Errorf("resolved %q/%q, want the image pair as a fallback", key, secret)
+	}
+}
+
+// The image bucket has nothing to fall back to, so its error names its own
+// pair and does not offer a datastore key that would not open it.
+func TestResolveCredentialsImagePairHasNoFallback(t *testing.T) {
 	t.Setenv("B2_ACCESS_KEY", "")
 	t.Setenv("B2_ACCESS_SECRET", "")
+	t.Setenv("B2_DATASTORE_ACCESS_KEY", "ds-key")
+	t.Setenv("B2_DATASTORE_ACCESS_SECRET", "ds-secret")
 
-	_, _, err := openBucket(context.Background(), "b2://mtgban-images/magic", imageCreds)
+	_, _, err := resolveCredentials(imageCreds)
 	if err == nil {
-		t.Fatal("opening the image bucket with no credentials = nil error, want an error")
+		t.Fatal("no image credentials = nil error, want an error")
 	}
 	if !strings.Contains(err.Error(), "B2_ACCESS_KEY") {
 		t.Errorf("error does not name the image key pair:\n%v", err)
 	}
 	if strings.Contains(err.Error(), "DATASTORE") {
 		t.Errorf("error offers a datastore key for the image bucket:\n%v", err)
+	}
+}
+
+// A run is told which game it is mirroring; where that game's datastore lives
+// follows from it, so there is no second thing to keep in step per game.
+func TestDatastoreURLDerivesPerGame(t *testing.T) {
+	t.Setenv(datastoreEnv, "")
+	t.Setenv(datastoreRootEnv, "")
+
+	for _, tt := range []struct {
+		game source.Game
+		want string
+	}{
+		{source.Lorcana, "b2://mtgban-datastore/lorcana/allCards.json"},
+		{source.Riftbound, "b2://mtgban-datastore/riftbound/allCards.json"},
+	} {
+		if got := datastoreURL(tt.game); got != tt.want {
+			t.Errorf("datastoreURL(%s) = %q, want %q", tt.game, got, tt.want)
+		}
+	}
+}
+
+// The root moves every game at once, for a different datastore bucket or a
+// local tree of them, without naming any game individually.
+func TestDatastoreURLFollowsTheRoot(t *testing.T) {
+	t.Setenv(datastoreEnv, "")
+	t.Setenv(datastoreRootEnv, "./datastores")
+	if got, want := datastoreURL(source.Lorcana), "./datastores/lorcana/allCards.json"; got != want {
+		t.Errorf("datastoreURL = %q, want %q", got, want)
+	}
+
+	// a trailing slash on the root must not double up in the path
+	t.Setenv(datastoreRootEnv, "b2://other-bucket/")
+	if got, want := datastoreURL(source.Riftbound), "b2://other-bucket/riftbound/allCards.json"; got != want {
+		t.Errorf("datastoreURL = %q, want %q", got, want)
+	}
+}
+
+// The override is for one odd document, so it wins over both the root and the
+// per-game convention rather than being combined with them.
+func TestDatastoreURLOverrideWinsOutright(t *testing.T) {
+	t.Setenv(datastoreRootEnv, "b2://ignored")
+	t.Setenv(datastoreEnv, "./lorcana-snapshot.json.xz")
+	if got, want := datastoreURL(source.Lorcana), "./lorcana-snapshot.json.xz"; got != want {
+		t.Errorf("datastoreURL = %q, want %q", got, want)
 	}
 }

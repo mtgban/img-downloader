@@ -24,9 +24,39 @@ import (
 	"github.com/mtgban/simplecloud"
 )
 
-// datastoreEnv names the env var locating a non-Magic game's datastore
-// document, the counterpart of the website's datastore_path config key.
-const datastoreEnv = "IMGDL_DATASTORE"
+// Where a non-Magic game's datastore lives. A run is told which game it is
+// mirroring and works the rest out from that, so nothing has to be kept in
+// step with it per game.
+const (
+	// datastoreEnv overrides the derived location outright, for a local file
+	// or a document that is not where the convention puts it.
+	datastoreEnv = "IMGDL_DATASTORE"
+	// datastoreRootEnv is the prefix every game's datastore hangs off.
+	datastoreRootEnv = "IMGDL_DATASTORE_ROOT"
+	// defaultDatastoreRoot is where mtgban keeps them.
+	defaultDatastoreRoot = "b2://mtgban-datastore"
+	// datastoreDocument is what each game's document is called under its own
+	// prefix, matching the website's datastore_path for that game.
+	datastoreDocument = "allCards.json"
+)
+
+// datastoreURL is where game's datastore document lives: <root>/<game>/<doc>,
+// the same document the website loads for that game.
+//
+// Derived rather than passed in, because the caller already says which game it
+// is mirroring and anything else is a second place to keep in step. The
+// override stays for a local file or a document filed somewhere unusual.
+func datastoreURL(game source.Game) string {
+	explicit := os.Getenv(datastoreEnv)
+	if explicit != "" {
+		return explicit
+	}
+	root := os.Getenv(datastoreRootEnv)
+	if root == "" {
+		root = defaultDatastoreRoot
+	}
+	return strings.TrimSuffix(root, "/") + "/" + string(game) + "/" + datastoreDocument
+}
 
 // opts is one invocation's configuration, from flags and the environment.
 type opts struct {
@@ -129,15 +159,12 @@ func newProvider(ctx context.Context, game source.Game) (source.Provider, error)
 		return &magic.Provider{Log: log.Default()}, nil
 	}
 
-	raw := os.Getenv(datastoreEnv)
-	if raw == "" {
-		return nil, fmt.Errorf("%s is required to mirror %s, e.g. b2://mtgban-datastore/%s/allCards.json or a local file",
-			datastoreEnv, game, game)
-	}
+	raw := datastoreURL(game)
 	bucket, objectPath, err := openBucket(ctx, raw, datastoreCreds)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", datastoreEnv, err)
+		return nil, fmt.Errorf("datastore %s: %w", raw, err)
 	}
+	log.Printf("reading the %s datastore from %s", game, raw)
 	return datastore.New(game, datastore.Config{
 		Bucket: bucket,
 		Path:   objectPath,
@@ -234,6 +261,28 @@ func (c credentials) read() (string, string, bool) {
 	return key, secret, key != "" && secret != ""
 }
 
+// resolveCredentials returns the key pair a bucket should be opened with.
+//
+// The datastore falls back to the image pair, for a deployment running one key
+// across both buckets, and the error where neither is set names both so it does
+// not read as though only one were an option.
+func resolveCredentials(creds credentials) (string, string, error) {
+	key, secret, ok := creds.read()
+	if ok {
+		return key, secret, nil
+	}
+	if creds != datastoreCreds {
+		return "", "", fmt.Errorf("openBucket: %s and %s must be set for b2:// buckets",
+			creds.keyEnv, creds.secretEnv)
+	}
+	key, secret, ok = imageCreds.read()
+	if ok {
+		return key, secret, nil
+	}
+	return "", "", fmt.Errorf("openBucket: %s and %s (or %s and %s) must be set to read a b2:// datastore",
+		datastoreCreds.keyEnv, datastoreCreds.secretEnv, imageCreds.keyEnv, imageCreds.secretEnv)
+}
+
 // openBucket resolves raw into a bucket and its base path within it, opening a
 // b2:// url with the given key pair.
 func openBucket(ctx context.Context, raw string, creds credentials) (simplecloud.ReadWriter, string, error) {
@@ -248,22 +297,9 @@ func openBucket(ctx context.Context, raw string, creds credentials) (simplecloud
 		// a one letter scheme is a Windows drive letter, e.g. C:/x
 		return nil, "", fmt.Errorf("openBucket: Windows absolute paths are not supported: %s", raw)
 	case u.Scheme == "b2":
-		key, secret, ok := creds.read()
-		if !ok {
-			// The datastore falls back to the image key, for a deployment
-			// running one key across both buckets. Naming both pairs keeps
-			// that from reading as though only one of them were an option.
-			if creds == datastoreCreds {
-				var fellBack bool
-				key, secret, fellBack = imageCreds.read()
-				if !fellBack {
-					return nil, "", fmt.Errorf("openBucket: %s and %s (or %s and %s) must be set to read a b2:// datastore",
-						datastoreCreds.keyEnv, datastoreCreds.secretEnv, imageCreds.keyEnv, imageCreds.secretEnv)
-				}
-			} else {
-				return nil, "", fmt.Errorf("openBucket: %s and %s must be set for b2:// buckets",
-					creds.keyEnv, creds.secretEnv)
-			}
+		key, secret, err := resolveCredentials(creds)
+		if err != nil {
+			return nil, "", err
 		}
 		b2Bucket, err := simplecloud.NewB2Client(ctx, key, secret, u.Host)
 		if err != nil {
