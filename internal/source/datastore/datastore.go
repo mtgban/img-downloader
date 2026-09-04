@@ -17,11 +17,8 @@ import (
 	"github.com/mtgban/img-downloader/internal/mirror"
 	"github.com/mtgban/img-downloader/internal/source"
 	"github.com/mtgban/simplecloud"
-
-	// the games whose datastores this provider can open; mtgmatcher resolves a
-	// game by name only if its package has registered a loader
-	_ "github.com/mtgban/go-mtgban/mtgmatcher/lorcana"
-	_ "github.com/mtgban/go-mtgban/mtgmatcher/riftbound"
+	// the loaders come in through internal/source, which gathers them in one
+	// import; mtgmatcher resolves a game by name only if one is registered
 )
 
 // imageKind is the mtgmatcher Images key mirrored. A datastore card carries

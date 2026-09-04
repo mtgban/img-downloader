@@ -39,8 +39,8 @@ This layout is settled with the project owner; do not change it without
 updating both this tool and the website consumer.
 
 Each game lives under its own bucket prefix — `b2://mtgban-images/magic`,
-`.../lorcana`, `.../riftbound` — and everything below is relative to that
-prefix. State and the manifest are single documents at the prefix, keyed by
+`.../lorcana`, `.../pokemon` and so on — and everything below is relative to
+that prefix. State and the manifest are single documents at the prefix, keyed by
 image key with no record of which game a key came from, so two games sharing a
 prefix would interleave their keys and each run would delete the other's
 entries. `mirror-game.json` at the base records which game owns the prefix and
@@ -153,7 +153,7 @@ q90 a jpg re-encode comes out larger than the jpg it came from.
 
 A source the mirror cannot decode is a failed fetch, not a stored object.
 
-### Datastore-backed games (Lorcana, Riftbound)
+### Datastore-backed games (everything except Magic)
 
 Same tree shape, different key namespace, because these games' ids are not
 scryfall ids.
@@ -202,8 +202,10 @@ B2_BUCKET=./tmp-lorcana IMGDL_DATASTORE=./lorcana.json.xz \
 
 ### Flags
 
-- `-game`: which game to mirror — `magic`, `lorcana` or `riftbound`. Defaults
-  to `$IMGDL_GAME`, or `magic`. It selects both the data source and the key
+- `-game`: which game to mirror. The list is read from what mtgmatcher
+  registers rather than written out, so it is whatever the pinned go-mtgban
+  provides — run with an unknown game to have it name them. Defaults to
+  `$IMGDL_GAME`, or `magic`. It selects both the data source and the key
   namespace, so an unknown value is refused rather than guessed at.
 - `-sets`: comma-separated set codes to mirror; empty means all sets.
 - `-dry-run`: print the fetch plan without fetching or writing anything.
