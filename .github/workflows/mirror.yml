@@ -13,6 +13,12 @@ on:
           - magic
           - lorcana
           - riftbound
+          - fleshandblood
+          - onepiece
+          - pokemon
+          - yugioh
+          - gundam
+          - palworld
       sets:
         description: comma-separated set codes (empty = all)
         required: false
