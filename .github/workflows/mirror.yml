@@ -13,6 +13,10 @@ on:
           - magic
           - lorcana
           - riftbound
+          - fleshandblood
+          - onepiece
+          - pokemon
+          - yugioh
       sets:
         description: comma-separated set codes (empty = all)
         required: false
