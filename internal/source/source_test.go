@@ -1,6 +1,9 @@
 package source_test
 
 import (
+	"slices"
+
+	"github.com/mtgban/go-mtgban/mtgmatcher"
 	"reflect"
 	"testing"
 
@@ -32,7 +35,9 @@ func TestParseGame(t *testing.T) {
 // The game names the bucket prefix written to, so a value that is nearly right
 // must be refused rather than resolved to something plausible.
 func TestParseGameRejectsUnknown(t *testing.T) {
-	for _, bad := range []string{"", "mtg", "pokemon", "magic/../lorcana", "magic lorcana"} {
+	// Not a near-miss like "pokemon", which this test used until pokemon
+	// became a game the mirror runs: a name that is never going to be one.
+	for _, bad := range []string{"", "mtg", "notagame", "magic/../lorcana", "magic lorcana"} {
 		if got, err := source.ParseGame(bad); err == nil {
 			t.Errorf("ParseGame(%q) = %q, want an error", bad, got)
 		}
@@ -74,5 +79,36 @@ func TestWantIsAMirrorImageMap(t *testing.T) {
 	}
 	if got := mirror.NeedFetch(mirror.State{}, want); !reflect.DeepEqual(got, []string{"a"}) {
 		t.Errorf("NeedFetch(want) = %v, want [a]", got)
+	}
+}
+
+// Games is only as good as the blank import that fills it: drop that and it
+// returns nothing, ParseGame refuses every name, and the tool mirrors no game
+// at all while compiling perfectly.
+func TestGamesIsNotEmpty(t *testing.T) {
+	games := source.Games()
+	if len(games) == 0 {
+		t.Fatal("Games() is empty, so no loader is registered and no game can be mirrored")
+	}
+	// magic and lorcana are the two the rest of the suite leans on
+	for _, want := range []source.Game{source.Magic, source.Lorcana} {
+		if !slices.Contains(games, want) {
+			t.Errorf("Games() = %v, missing %q", games, want)
+		}
+	}
+}
+
+// Whatever mtgmatcher registers is what the tool offers, so a game added
+// upstream arrives with the dependency rather than with an edit here.
+func TestGamesFollowsTheRegistry(t *testing.T) {
+	registered := mtgmatcher.RegisteredGames()
+	if len(source.Games()) != len(registered) {
+		t.Errorf("Games() has %d entries, mtgmatcher registers %d: %v vs %v",
+			len(source.Games()), len(registered), source.Games(), registered)
+	}
+	for _, name := range registered {
+		if !slices.Contains(source.Games(), source.Game(name)) {
+			t.Errorf("mtgmatcher registers %q but Games() omits it", name)
+		}
 	}
 }
