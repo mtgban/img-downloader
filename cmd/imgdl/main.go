@@ -223,8 +223,8 @@ func parseSets(csv string) map[string]bool {
 type credentials struct{ keyEnv, secretEnv string }
 
 var (
-	imageCreds     = credentials{"B2_ACCESS_KEY", "B2_ACCESS_SECRET"}
-	datastoreCreds = credentials{"B2_DATASTORE_ACCESS_KEY", "B2_DATASTORE_ACCESS_SECRET"}
+	imageCreds     = credentials{"B2_IMAGES_KEY", "B2_IMAGES_SECRET"}
+	datastoreCreds = credentials{"B2_DATASTORE_KEY", "B2_DATASTORE_SECRET"}
 )
 
 // read returns the pair, and whether both halves were set.
