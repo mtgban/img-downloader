@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/Backblaze/blazer v0.7.2
-	github.com/mtgban/go-mtgban v0.8.3
+	github.com/mtgban/go-mtgban v0.9.1
 	github.com/mtgban/simplecloud v0.0.13
 )
 

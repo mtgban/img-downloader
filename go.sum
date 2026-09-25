@@ -190,6 +190,8 @@ github.com/mtgban/go-mtgban v0.8.2 h1:s0KDNJ6+BaeUZxbj1H6JPnCoId4lHj0v6x7F3lUS/l
 github.com/mtgban/go-mtgban v0.8.2/go.mod h1:eKfmn1AY1yGoR04UoidwHXNf647oAluRcj+1ruSvOr0=
 github.com/mtgban/go-mtgban v0.8.3 h1:gD45jb2nGKYlE3FYhfwVyq93dqlhLAkDVYxqLuuEhgg=
 github.com/mtgban/go-mtgban v0.8.3/go.mod h1:nrOod4F0Pb54rurix1VogZebXvhcwiNE7LPOBLZQj5E=
+github.com/mtgban/go-mtgban v0.9.1 h1:Y6yzgm2kmRkf9lapUAavFQRCMhj9PFNEEp9qq7tkvio=
+github.com/mtgban/go-mtgban v0.9.1/go.mod h1:ejly1X0PNdPGx5Wioj0HqpTYu7ULg0uYKmUNVUXl1h4=
 github.com/mtgban/simplecloud v0.0.11 h1:KkMyHnLtWVuypnasJeE/eTm3LIx0lCvwHQUwghS+gHI=
 github.com/mtgban/simplecloud v0.0.11/go.mod h1:oSkZ6RP2WHry1yiwEA/k90muilgxI2/RP2N+k6XiooE=
 github.com/mtgban/simplecloud v0.0.13 h1:X6e5XIyOYI2StBZJrMLENIm+/lb3/hFou8RrnFqXWkI=
