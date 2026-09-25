@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  workflow_dispatch: {}
+  # A branch with a pull request open answers for it there, so pushing to one
+  # would otherwise run the whole suite twice over the same commit.
+  push:
+    branches:
+      - master
+  pull_request: {}
+
+# One run per branch: a push that supersedes another stops it rather than
+# racing it for the runners.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  style:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install golang
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -s -l .)
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt-ed:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      # Pinned, since a new release finding new things would fail a build
+      # that changed nothing. A go.mod bump may need one here too: 2025.1.1
+      # cannot read Go 1.27's export data.
+      - name: Staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -race ./...
