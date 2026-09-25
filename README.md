@@ -24,8 +24,8 @@ mtgban's own datastore, the same document the website loads.
   `AllPrintings.json.gz` into per-set `scryfallId` and sealed
   `tcgplayerProductId` lists, then joins them.
 - **Datastore** (`internal/source/datastore`) reads one game's datastore
-  document with `mtgmatcher.Open` and takes each card's id and its `full`
-  image URL straight from it. Lorcana and Riftbound are wired up. Nothing
+  document with `mtgmatcher.Open` and takes each card's product and its
+  `full` image URL straight from it. Lorcana and Riftbound are wired up. Nothing
   parses that document by hand, so this tool and the website cannot drift
   apart on its schema.
 
@@ -158,11 +158,14 @@ A source the mirror cannot decode is a failed fetch, not a stored object.
 Same tree shape, different key namespace, because these games' ids are not
 scryfall ids.
 
-- Image key is the card's own mtgmatcher uuid for singles and `p-<uuid>` for
-  sealed products. The key is the card's id, never the image URL's basename:
-  Magic can use the basename because a Scryfall URL is named for the card,
-  whereas these games' URLs are their CDN's own filenames.
-- Singles object path: `singles/full/front/<c1>/<c2>/<uuid>.webp`. `full` is
+- Image key for a single is its TCGplayer product id (`tcgplayerProductId`),
+  or for a card that names no product, the key its finishes share
+  (`mtgmatcher.PrintingKey`); for a sealed product it is `p-<uuid>`. Keys are
+  read from the card's fields, never from the image URL's basename or the
+  uuid's shape: Magic can use the basename because a Scryfall URL is named
+  for the card, whereas these games' URLs are their CDN's own filenames, and a
+  datastore uuid is its builder's to spell and respell.
+- Singles object path: `singles/full/front/<c1>/<c2>/<key>.webp`. `full` is
   the mtgmatcher `Images` key mirrored, occupying the slot Magic's `grid`
   does; these games publish one image per card rather than a set of encodes.
 - Sealed object path: `sealed/<SETCODE>/<uuid>.webp`, the same shape Magic's
@@ -173,17 +176,19 @@ scryfall ids.
   website used to turn a key back into an object path; clients read whole
   bundles now, and every path in one comes from the want-list, which knows the
   set code.
-- `<c1>/<c2>` are the first two characters of the id, an id shorter than two
+- `<c1>/<c2>` are the first two characters of the key, a key shorter than two
   characters being left-padded (`7` files under `0/7`) so every game has the
   same tree depth.
 - The extension is always `webp`, whatever the CDN served: these games publish
   jpg and png, and the mirror converts on the way in. See *Stored format*.
 - The set code is still recorded on each image and is what the manifest is
   keyed by; it is simply not in the object path.
-- A printing's foil and nonfoil variants are separate uuids in mtgmatcher
-  (`460` and `460_f`, `ogn-066-298_nonfoil` and `..._foil`) that share one
-  image. The mirror stores the printing once under its base uuid, so a reader
-  holding a finish uuid trims at the last underscore to find it.
+- Every finish of a product is an entry of its own in mtgmatcher
+  (`dtd011_502592` and `dtd011_502592_rainbowfoil`), and they share one image.
+  The mirror walks those entries the way the website's catalog does and files
+  the image once under the key they share. The website computes the same key
+  from the same fields (`internal/offlineapi`'s `datastoreImageKey`), so the
+  two change together.
 
 ## Usage
 
