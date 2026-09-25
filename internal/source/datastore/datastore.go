@@ -2,8 +2,8 @@
 // for the games that have no public bulk export to build one from.
 //
 // It reads the same document the website reads — the datastore file a
-// deployment loads with mtgmatcher — and takes each card's id and its "full"
-// image URL straight from it. Nothing here parses that document by hand:
+// deployment loads with mtgmatcher — and takes each card's product and its
+// "full" image URL straight from it. Nothing here parses that document by hand:
 // mtgmatcher.Open decodes it, so this tool and the website agree on the schema
 // by construction rather than by a copy of it kept in step.
 package datastore
@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"slices"
 
 	"github.com/mtgban/go-mtgban/mtgmatcher"
 	"github.com/mtgban/img-downloader/internal/mirror"
@@ -113,6 +114,9 @@ type stats struct {
 	noImage     int
 	unusableID  int
 	sealedNoImg int
+	// clashes counts finishes whose key already holds another image or set,
+	// each of which leaves one of them showing the wrong picture
+	clashes int
 }
 
 // wantFromBackend walks the loaded datastore into a want-list.
@@ -120,6 +124,7 @@ func (p *Provider) wantFromBackend(backend *mtgmatcher.Backend, setsFilter map[s
 	want := source.Want{}
 	var st stats
 
+	usable := map[string]bool{}
 	for code, set := range backend.Sets {
 		if set == nil {
 			continue
@@ -133,49 +138,67 @@ func (p *Provider) wantFromBackend(backend *mtgmatcher.Backend, setsFilter map[s
 		if setsFilter != nil && !setsFilter[code] {
 			continue
 		}
+		usable[code] = true
 
-		for _, cards := range [][]mtgmatcher.Card{set.Cards, set.Tokens} {
-			for _, card := range cards {
-				p.addSingle(want, code, card, &st)
-			}
-		}
 		for _, product := range set.SealedProduct {
 			p.addSealed(want, code, product, backend, &st)
 		}
 	}
 
-	logger.Printf("datastore: %d images wanted; skipped %d cards with no %s image, %d with an unusable id, %d sealed products with no image",
-		len(want), st.noImage, imageKind, st.unusableID, st.sealedNoImg)
+	// Singles are walked the way the website's catalog walks them, one entry
+	// per finish, and sorted so a clash resolves the same way every run.
+	for _, uuid := range slices.Sorted(slices.Values(backend.GetUUIDs())) {
+		co := backend.UUIDs[uuid]
+		if co == nil || co.Sealed || !usable[co.SetCode] {
+			continue
+		}
+		p.addSingle(want, co, &st, logger)
+	}
+
+	logger.Printf("datastore: %d images wanted; skipped %d cards with no %s image, %d with an unusable id, %d sealed products with no image; %d cards clashed on a key",
+		len(want), st.noImage, imageKind, st.unusableID, st.sealedNoImg, st.clashes)
 	if len(want) == 0 {
 		return nil, fmt.Errorf("datastore: %s datastore yielded no images; refusing to treat that as an empty mirror", p.game)
 	}
 	return want, nil
 }
 
-// addSingle adds one card's front image to want.
-func (p *Provider) addSingle(want source.Want, setCode string, card mtgmatcher.Card, st *stats) {
-	srcURL := card.Images[imageKind]
+// singleKey is the key a single's image is filed under: the TCGplayer product
+// id all finishes of the product share or, where the card names no product,
+// the key its finishes share (mtgmatcher.PrintingKey). The website's offline
+// catalog asks for the same expression (internal/offlineapi,
+// datastoreImageKey); change both together.
+//
+// It reads fields, never the uuid's shape, which the datastore may respell.
+// Keyed apart, a set level uuid here and a cut uuid there, 115,429 of the
+// 140,047 singles the website listed asked for a key this never filed.
+func singleKey(co *mtgmatcher.CardObject) string {
+	return mtgmatcher.ProductKeyOf(co.Identifiers, mtgmatcher.PrintingKey(co.Card))
+}
+
+// addSingle adds one entry's front image to want, once per key: the other
+// finishes of the product land on the same key and are only checked against
+// it.
+func (p *Provider) addSingle(want source.Want, co *mtgmatcher.CardObject, st *stats, logger *log.Logger) {
+	srcURL := co.Images[imageKind]
 	if srcURL == "" {
 		st.noImage++
 		return
 	}
-	// The key is the card's own datastore id, not the image URL's basename.
-	// Magic can use the basename because a Scryfall URL is named for the card;
-	// these games' URLs are their CDN's filenames, which name nothing the rest
-	// of the system knows.
-	//
-	// This is the set level card, so its uuid is the printing's base id. The
-	// per finish uuids that hang off it (Lorcana's "460_f", Riftbound's
-	// "ogn-066-298_foil") all share this one image, so the printing is
-	// mirrored once and a reader holding a finish uuid trims at the last
-	// underscore to find it. Mirroring per finish instead would store the
-	// same bytes two or three times over.
-	objectPath, err := mirror.GameSingleObjectPath(card.UUID, variant)
+	key := singleKey(co)
+	if have, found := want[key]; found {
+		if have.URL != srcURL || have.SetCode != co.SetCode {
+			st.clashes++
+			logger.Printf("datastore: %s wants %s (%s) under %s, which holds %s (%s)", co.UUID, srcURL, co.SetCode, key, have.URL, have.SetCode)
+		}
+		return
+	}
+	objectPath, err := mirror.GameSingleObjectPath(key, variant)
 	if err != nil {
 		st.unusableID++
 		return
 	}
-	want[card.UUID] = mirror.Image{Key: card.UUID, URL: srcURL, ObjectPath: objectPath, SetCode: setCode}
+	want[key] = mirror.Image{Key: key, URL: srcURL, ObjectPath: objectPath, SetCode: co.SetCode}
 }
 
 // addSealed adds one sealed product's image to want. The product's image lives
