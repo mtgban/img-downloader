@@ -233,7 +233,7 @@ images, rather than silently doing nothing.
 - `B2_BUCKET` (required): destination, either `b2://name/prefix` or a local
   directory path. It is the full base for this run, including the game
   segment; nothing is appended to it.
-- `B2_ACCESS_KEY`, `B2_ACCESS_SECRET`: required when `B2_BUCKET` uses the
+- `B2_IMAGES_KEY`, `B2_IMAGES_SECRET`: required when `B2_BUCKET` uses the
   `b2://` scheme. Not read from any config file, env only.
 - `IMGDL_GAME`: default for `-game`.
 - `IMGDL_DATASTORE`: required for every game except Magic. The datastore
@@ -241,8 +241,10 @@ images, rather than silently doing nothing.
   or a local file. This is the counterpart of the website's `datastore_path`
   config key, and it is a separate location from the image bucket: the
   datastore is the site's data, not the mirror's. `.xz` and `.gz` suffixes are
-  decompressed by simplecloud on the way in. When it names a `b2://` bucket it
-  reuses `B2_ACCESS_KEY`/`B2_ACCESS_SECRET`.
+  decompressed by simplecloud on the way in.
+- `B2_DATASTORE_KEY`, `B2_DATASTORE_SECRET`: the key a `b2://`
+  `IMGDL_DATASTORE` is read with. Where they are unset it falls back to
+  `B2_IMAGES_KEY`/`B2_IMAGES_SECRET`.
 
 ## GitHub Action
 
@@ -250,10 +252,11 @@ images, rather than silently doing nothing.
 past midnight UTC, chosen to avoid the top-of-hour scheduling drops GitHub
 documents) and can also be triggered manually via workflow_dispatch with
 `game`, `sets`, `dry_run`, `retry_missing`, `rebuild_bundles` and `datastore`
-inputs. It needs two repo secrets:
+inputs. It needs two secrets, which it passes to imgdl as `B2_IMAGES_KEY` and
+`B2_IMAGES_SECRET`:
 
-- `B2_ACCESS_KEY`
-- `B2_ACCESS_SECRET`
+- `B2_APPLICATION_KEY_ID_IMAGES`
+- `B2_APPLICATION_KEY_IMAGES`
 
 The cron fires with `game` unset, which means Magic — the scheduled run is
 unchanged. Concurrency is grouped per game, since two games write different
@@ -268,13 +271,14 @@ is derived as `$IMGDL_DATASTORE_ROOT/<game>/<game>.json.xz`, with
 
 The datastore is a different bucket and takes a key of its own, since a B2
 application key is scoped to a single bucket and the mirror only ever reads
-the datastore while it writes images:
+the datastore while it writes images. The workflow passes it as
+`B2_DATASTORE_KEY` and `B2_DATASTORE_SECRET`:
 
-- `B2_DATASTORE_ACCESS_KEY`
-- `B2_DATASTORE_ACCESS_SECRET`
+- `B2_APPLICATION_KEY_ID_DATASTORE`
+- `B2_APPLICATION_KEY_DATASTORE`
 
-Both are optional. Where they are unset the datastore falls back to
-`B2_ACCESS_KEY`, for a deployment running one key across both buckets.
+Both are optional. Where they are unset the datastore falls back to the images
+key, for a deployment running one key across both buckets.
 
 `B2_BUCKET` is derived as `$B2_BUCKET_ROOT/<game>`, with `B2_BUCKET_ROOT`
 defaulting to `b2://mtgban-images`. An existing `B2_BUCKET` Actions variable
