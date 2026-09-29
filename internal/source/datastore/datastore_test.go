@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"log"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -267,7 +268,7 @@ func TestNewRejectsUnregisteredGameAndMissingConfig(t *testing.T) {
 func TestGamePackagesAreRegistered(t *testing.T) {
 	registered := mtgmatcher.RegisteredGames()
 	for _, game := range []source.Game{source.Lorcana, source.Riftbound} {
-		if !slicesContains(registered, string(game)) {
+		if !slices.Contains(registered, mtgmatcher.Game(game)) {
 			t.Errorf("mtgmatcher has no loader registered for %q; registered: %v", game, registered)
 		}
 	}

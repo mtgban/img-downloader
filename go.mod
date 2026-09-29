@@ -4,8 +4,10 @@ go 1.26.1
 
 require (
 	github.com/Backblaze/blazer v0.7.2
-	github.com/mtgban/go-mtgban v0.9.1
-	github.com/mtgban/simplecloud v0.0.13
+	github.com/chai2010/webp v1.4.0
+	github.com/mtgban/go-mtgban v0.9.3
+	github.com/mtgban/simplecloud v0.0.17
+	golang.org/x/image v0.45.0
 )
 
 require (
@@ -40,7 +42,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.47.0 // indirect
 	github.com/aws/smithy-go v1.28.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chai2010/webp v1.4.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.39.0 // indirect
@@ -68,7 +69,6 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.46.0 // indirect
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
 	golang.org/x/crypto v0.55.0 // indirect
-	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect

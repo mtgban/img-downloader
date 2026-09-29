@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"slices"
 	"sort"
 	"strings"
 
@@ -50,7 +51,7 @@ const (
 // and every run is refused, which is the failure that test asserts against.
 func Games() []Game {
 	names := mtgmatcher.RegisteredGames()
-	sort.Strings(names)
+	slices.Sort(names)
 	out := make([]Game, 0, len(names))
 	for _, name := range names {
 		out = append(out, Game(name))
