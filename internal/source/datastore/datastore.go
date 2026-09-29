@@ -59,20 +59,11 @@ func New(game source.Game, cfg Config) (*Provider, error) {
 	if cfg.Path == "" {
 		return nil, fmt.Errorf("datastore: no datastore path configured for %s", game)
 	}
-	if !slicesContains(mtgmatcher.RegisteredGames(), string(game)) {
+	if !slices.Contains(mtgmatcher.RegisteredGames(), mtgmatcher.Game(game)) {
 		return nil, fmt.Errorf("datastore: mtgmatcher has no loader for %q, registered: %v",
 			game, mtgmatcher.RegisteredGames())
 	}
 	return &Provider{game: game, cfg: cfg}, nil
-}
-
-func slicesContains(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
 }
 
 // Game implements source.Provider.
@@ -96,11 +87,7 @@ func (p *Provider) BuildWant(ctx context.Context, setsFilter map[string]bool) (s
 	}
 	defer reader.Close()
 
-	// Open rather than LoadDatastore: this tool mirrors one game per run and
-	// has no use for mtgmatcher's global backend, and loading a game's data
-	// into a process-wide singleton is how a second game would silently
-	// inherit the first one's cards.
-	backend, err := mtgmatcher.Open(string(p.game), reader)
+	backend, err := mtgmatcher.Open(mtgmatcher.Game(p.game), reader)
 	if err != nil {
 		return nil, fmt.Errorf("datastore: load %s datastore: %w", p.game, err)
 	}
