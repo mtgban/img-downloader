@@ -2,6 +2,7 @@ package mirror
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/mtgban/simplecloud"
@@ -16,7 +17,7 @@ type gameMarker struct {
 }
 
 // ErrGameMismatch is returned when a base already belongs to another game.
-var ErrGameMismatch = fmt.Errorf("mirror: bucket prefix belongs to a different game")
+var ErrGameMismatch = errors.New("mirror: bucket prefix belongs to a different game")
 
 // LoadGameMarker returns the game recorded at base, or "" if none is recorded.
 func LoadGameMarker(ctx context.Context, bucket simplecloud.Reader, base string) (string, error) {

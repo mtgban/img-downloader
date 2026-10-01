@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -114,7 +115,7 @@ func advanceToDataObject(dec *json.Decoder) error {
 			return err
 		}
 	}
-	return fmt.Errorf("mtgjson: no \"data\" key found")
+	return errors.New("mtgjson: no \"data\" key found")
 }
 
 func toSetImages(s slimSet) SetImages {

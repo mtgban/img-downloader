@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	// register the decoders image.Decode needs for the source formats
 	_ "image/jpeg"
 	_ "image/png"
 

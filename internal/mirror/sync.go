@@ -72,7 +72,7 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 	res.Pending = len(fetches)
 	logger.Printf("%d images to fetch, %d wanted", len(fetches), len(opts.Want))
 	if opts.DryRun {
-		logger.Printf("dry run: no fetch or bundle work performed")
+		logger.Print("dry run: no fetch or bundle work performed")
 		return res, nil
 	}
 
@@ -86,7 +86,7 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 	// state and the bundle hash already accounts for their absence.
 	var bundleErr error
 	if ctx.Err() != nil || errors.Is(fetchErr, ErrTooManyFailures) {
-		logger.Printf("run stopped early, skipping bundle rebuild")
+		logger.Print("run stopped early, skipping bundle rebuild")
 	} else {
 		digests := SetDigests(state, opts.Want)
 		var codes []string
