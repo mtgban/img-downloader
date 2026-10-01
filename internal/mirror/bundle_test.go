@@ -18,10 +18,24 @@ import (
 	"github.com/mtgban/simplecloud"
 )
 
+func writeFile(t *testing.T, path string, data []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mkdirAll(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRebuildBundlesOnlyRebuildsChangedSet(t *testing.T) {
 	base := filepath.ToSlash(t.TempDir())
-	os.WriteFile(filepath.Join(filepath.FromSlash(base), "a.jpg"), []byte("aaa"), 0644)
-	os.WriteFile(filepath.Join(filepath.FromSlash(base), "b.jpg"), []byte("bbb"), 0644)
+	writeFile(t, filepath.Join(filepath.FromSlash(base), "a.jpg"), []byte("aaa"))
+	writeFile(t, filepath.Join(filepath.FromSlash(base), "b.jpg"), []byte("bbb"))
 
 	state := State{
 		"card-a": {Digest: "d1", Source: "s"},
@@ -58,7 +72,7 @@ func TestRebuildBundlesOnlyRebuildsChangedSet(t *testing.T) {
 
 func TestRebuildBundlesIsolatesSetFailures(t *testing.T) {
 	base := filepath.ToSlash(t.TempDir())
-	os.WriteFile(filepath.Join(filepath.FromSlash(base), "good.jpg"), []byte("img-good"), 0644)
+	writeFile(t, filepath.Join(filepath.FromSlash(base), "good.jpg"), []byte("img-good"))
 	// card-bad has state but no backing image file, so its set fails.
 
 	state := State{
@@ -304,11 +318,11 @@ func TestRebuildBundlesLogsWhyASetFailed(t *testing.T) {
 func TestBundleEntriesAreAllNamedWebp(t *testing.T) {
 	base := filepath.ToSlash(t.TempDir())
 	root := filepath.FromSlash(base)
-	os.MkdirAll(filepath.Join(root, "singles", "grid", "front", "a", "b"), 0755)
-	os.MkdirAll(filepath.Join(root, "sealed", "NEO"), 0755)
+	mkdirAll(t, filepath.Join(root, "singles", "grid", "front", "a", "b"))
+	mkdirAll(t, filepath.Join(root, "sealed", "NEO"))
 	single := "ab154b52-1234-5678-9abc-def012345678"
-	os.WriteFile(filepath.Join(root, "singles", "grid", "front", "a", "b", single+".webp"), []byte("webp"), 0644)
-	os.WriteFile(filepath.Join(root, "sealed", "NEO", "541185.webp"), []byte("webp"), 0644)
+	writeFile(t, filepath.Join(root, "singles", "grid", "front", "a", "b", single+".webp"), []byte("webp"))
+	writeFile(t, filepath.Join(root, "sealed", "NEO", "541185.webp"), []byte("webp"))
 
 	state := State{single: {Digest: "d1", Source: "s"}, "p-NEO-541185": {Digest: "d2", Source: "s"}}
 	want := map[string]Image{
@@ -348,8 +362,8 @@ func supersededFixture(t *testing.T, digest string) (string, State, map[string]I
 	base := filepath.ToSlash(t.TempDir())
 	root := filepath.FromSlash(base)
 	single := "ab154b52-1234-5678-9abc-def012345678"
-	os.MkdirAll(filepath.Join(root, "singles", "grid", "front", "a", "b"), 0755)
-	os.WriteFile(filepath.Join(root, "singles", "grid", "front", "a", "b", single+".webp"), []byte("webp"), 0644)
+	mkdirAll(t, filepath.Join(root, "singles", "grid", "front", "a", "b"))
+	writeFile(t, filepath.Join(root, "singles", "grid", "front", "a", "b", single+".webp"), []byte("webp"))
 
 	state := State{single: {Digest: digest, Source: "s"}}
 	want := map[string]Image{

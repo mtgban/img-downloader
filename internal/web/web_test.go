@@ -13,7 +13,10 @@ import (
 
 func TestGetSendsUserAgent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, r.Header.Get("User-Agent"))
+		_, err := io.WriteString(w, r.Header.Get("User-Agent"))
+		if err != nil {
+			t.Error(err)
+		}
 	}))
 	defer srv.Close()
 
