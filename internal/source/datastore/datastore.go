@@ -69,11 +69,6 @@ func New(game source.Game, cfg Config) (*Provider, error) {
 // Game implements source.Provider.
 func (p *Provider) Game() source.Game { return p.game }
 
-// IsSealedKey implements source.SealedAware. Sealed keys keep the Magic p-
-// prefix so one key namespace serves every game and singles stay
-// distinguishable from products without consulting the game.
-func (p *Provider) IsSealedKey(key string) bool { return mirror.IsSealedKey(key) }
-
 // BuildWant implements source.Provider.
 func (p *Provider) BuildWant(ctx context.Context, setsFilter map[string]bool) (source.Want, error) {
 	logger := p.cfg.Log

@@ -97,15 +97,6 @@ type Provider interface {
 	BuildWant(ctx context.Context, setsFilter map[string]bool) (Want, error)
 }
 
-// SealedAware is implemented by providers whose want-list contains sealed
-// product images, which the -skip-sealed flag acts on. A provider that does
-// not implement it has no sealed pass, and that flag is refused rather than
-// silently doing nothing.
-type SealedAware interface {
-	// IsSealedKey reports whether key names a sealed product image.
-	IsSealedKey(key string) bool
-}
-
 // LogWant reports the shape of a want-list, so a run says what it is about to
 // do before it spends hours doing it.
 func LogWant(logger *log.Logger, game Game, want Want) {

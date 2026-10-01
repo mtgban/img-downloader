@@ -171,7 +171,9 @@ func SealedKey(setCode, tcgID string) string {
 	return fmt.Sprintf("p-%s-%s", setCode, tcgID)
 }
 
-// IsSealedKey reports whether key is a sealed product image key (p-<SETCODE>-<tcgId>).
+// IsSealedKey reports whether key is a sealed product image key: SealedKey's
+// p-<SETCODE>-<tcgId> or GameSealedKey's p-<id>. Every game files sealed
+// under the p- prefix, so -skip-sealed needs nothing from the provider.
 func IsSealedKey(key string) bool {
 	return strings.HasPrefix(key, "p-")
 }

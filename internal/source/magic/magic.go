@@ -40,10 +40,6 @@ type Provider struct {
 // Game implements source.Provider.
 func (p *Provider) Game() source.Game { return source.Magic }
 
-// IsSealedKey implements source.SealedAware; Magic mirrors TCGplayer's sealed
-// product images alongside singles.
-func (p *Provider) IsSealedKey(key string) bool { return mirror.IsSealedKey(key) }
-
 // BuildWant implements source.Provider. It fetches both bulk sources and joins
 // them into the want-list.
 func (p *Provider) BuildWant(ctx context.Context, setsFilter map[string]bool) (source.Want, error) {
