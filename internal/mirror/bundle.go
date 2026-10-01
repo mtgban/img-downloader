@@ -62,9 +62,7 @@ func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base str
 	var wg sync.WaitGroup
 	lastProgress := time.Now()
 	for range bundleWorkers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for code := range work {
 				// stop taking new work once the run is cancelled
 				if ctx.Err() != nil {
@@ -142,7 +140,7 @@ func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base str
 					saveMu.Unlock()
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 
