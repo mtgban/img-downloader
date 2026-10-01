@@ -52,6 +52,24 @@ func misfiled(prev StateEntry, img Image) bool {
 	return urlExt(prev.Source) != path.Ext(img.ObjectPath)
 }
 
+// RecordObjectPaths fills in ObjectPath on wanted entries that have none and
+// that misfiled judges to be where this run wants them, returning how many.
+// Once every entry records its path, misfiled no longer needs the source
+// extension to judge any of them.
+func RecordObjectPaths(state State, want map[string]Image) int {
+	n := 0
+	for key, img := range want {
+		prev, found := state[key]
+		if !found || prev.Missing || prev.ObjectPath != "" || misfiled(prev, img) {
+			continue
+		}
+		prev.ObjectPath = img.ObjectPath
+		state[key] = prev
+		n++
+	}
+	return n
+}
+
 // urlExt is the extension of a url's path, lowercased and with its dot, so a
 // query string (Scryfall stamps an epoch on every image url) is not mistaken
 // for part of it.
