@@ -53,3 +53,24 @@ jobs:
 
       - name: Test
         run: go test -race ./...
+
+  # govulncheck matches the module graph against the Go vulnerability database
+  # and reports only advisories the code actually reaches, so an unreachable
+  # one in a transitive module does not fail the build.
+  #
+  # Pinned like staticcheck, but for a different reason: the database is
+  # fetched at run time, so a pinned binary still sees new advisories. What the
+  # pin avoids is a tool release changing what counts as reachable.
+  vuln:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install golang
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
