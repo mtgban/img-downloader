@@ -97,8 +97,8 @@ func TestEnvOr(t *testing.T) {
 	}
 }
 
-// Magic must stay reachable without any new configuration, so the existing
-// scheduled run keeps working after this change with its env untouched.
+// Magic needs no datastore configuration, so the scheduled run's env is enough
+// for it.
 func TestNewProviderMagicNeedsNoDatastoreConfig(t *testing.T) {
 	t.Setenv(datastoreEnv, "")
 	p, err := newProvider(context.Background(), source.Magic)

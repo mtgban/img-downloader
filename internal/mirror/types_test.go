@@ -126,11 +126,8 @@ func TestSealedObjectPathAndGameSealedKey(t *testing.T) {
 	}
 }
 
-// Magic's singles layout is a settled contract with the website and an
-// existing 120k image bucket, and it is what keeps converting the corpus to
-// webp cheap: Scryfall already serves webp, so those objects neither move nor
-// get rewritten. Sealed did move, because TCGplayer serves jpg and that is now
-// converted on the way in.
+// Magic's layout is a settled contract with the website and a ~120k image
+// bucket; a change here moves every object it names.
 func TestMagicObjectPathsUnchanged(t *testing.T) {
 	const id = "7673784e-db4b-43a1-8d55-1bb9fc1e284f"
 	got, err := mirror.SingleObjectPath(id)

@@ -13,8 +13,9 @@ mirrored in production; see *Other games*.
 
 1. Asks the selected game's provider for a want-list: every image it should
    hold, as `key -> {source URL, object path, set code}`.
-2. Diffs that against the last saved state and fetches everything missing or
-   whose source URL changed.
+2. Diffs that against the last saved state and fetches everything missing,
+   whose source URL changed, or that is stored somewhere other than its object
+   path.
 3. Writes each image to the bucket and updates `mirror-state.json` and
    `images-manifest.json`.
 
@@ -46,8 +47,7 @@ image key with no record of which game a key came from, so two games sharing a
 prefix would interleave their keys and each run would delete the other's
 entries. `mirror-game.json` at the base records which game owns the prefix and
 a run refuses to write a prefix another game claimed. A prefix with no marker
-is unclaimed, not foreign, so the existing Magic bucket claims itself on its
-next run.
+is unclaimed, and the first run against it claims it.
 
 ### Magic
 
@@ -144,10 +144,9 @@ key namespace, because these games' ids are not scryfall ids.
 - Image key for a single is its TCGplayer product id (`tcgplayerProductId`),
   or for a card that names no product, the key its finishes share
   (`mtgmatcher.PrintingKey`); for a sealed product it is `p-<uuid>`. Keys are
-  read from the card's fields, never from the image URL's basename or the
-  uuid's shape: Magic can use the basename because a Scryfall URL is named
-  for the card, whereas these games' URLs are their CDN's own filenames, and a
-  datastore uuid is its builder's to spell and respell.
+  read from the card's fields, never from the image URL or the uuid's shape:
+  these games' URLs are their CDN's own filenames, and a datastore uuid is its
+  builder's to spell and respell.
 - Singles object path: `singles/full/front/<c1>/<c2>/<key>.webp`. `full` is
   the mtgmatcher `Images` key mirrored, occupying the slot Magic's `grid`
   does; these games publish one image per card rather than a set of encodes.
@@ -277,9 +276,9 @@ load, which is what the minute-17 offset is hedging against.
 
 ## Initial backfill
 
-The first run against an empty bucket has to fetch everything. As of the
-2026-08-07 dry run that is **119,797 images**, nearly all of them singles on
-the single host `cards.scryfall.io`; sealed images come from a second host
+The first run against an empty bucket has to fetch everything: **121,640
+images** as of the 2026-10-01 run, nearly all of them singles on the single
+host `cards.scryfall.io`; sealed images come from a second host
 and are fetched in parallel, so the singles determine the wall clock.
 
 The limiter books slots 100ms apart in absolute time rather than sleeping
@@ -308,7 +307,7 @@ where it left off instead of restarting; rerun the same command and it only
 fetches what is still missing.
 
 The bundle rebuild is the slower half of a first run: each set is rebuilt by
-reading its images back out of the bucket one at a time, so all ~119k reads
+reading its images back out of the bucket one at a time, so all ~122k reads
 land there. The 2026-08-07 run managed fewer than 50 sets in 31 minutes, the
 alphabetically-first sets being large ones, which puts the full pass in the
 region of four hours on its own. The manifest is therefore snapshotted every
@@ -317,12 +316,12 @@ returns immediately instead of walking the remainder failing every read.
 Without both, a run killed at its timeout would lose every bundle it had
 built, and the phase could never converge across runs.
 
-Progress is reported every 30 seconds during the crawl, and every 20 bundles
-during the rebuild:
+Progress is reported every 30 seconds in both phases, and the rebuild also
+reports each manifest snapshot, every 20 sets:
 
 ```
-fetched 24000/119797 (20%), 412 not published at source
-rebuilt 240/1043 bundles
+fetched 24000/121640 (19%), 120 not published at source
+rebuilt 240/868 bundles
 ```
 
 Both phases otherwise log only errors, which over a run this long makes a
@@ -333,14 +332,13 @@ one is either silent or deafening on the other.
 
 Two costs are specific to the first run. Every set's bundle is rebuilt
 because the manifest starts empty, and a rebuild reads its members back out
-of the bucket, so the run pulls all ~119k images down again (~30 GB of B2
+of the bucket, so the run pulls all ~122k images down again (~30 GB of B2
 egress, the billed direction) and uploads a comparable volume of zips. And
 the state document reaches about 40 MB at full scale (~120k entries of ~340
 bytes), rewritten whole on every snapshot — roughly 12 GB of writes across a
-backfill.
-That is B2 ingress, which is not billed, so it costs throughput rather than
-money. Steady-state daily runs rebuild only the sets that changed and so pay
-neither.
+backfill. That is B2 ingress, which is not billed, so it costs throughput
+rather than money. Steady-state daily runs rebuild only the sets that changed
+and save state once, so they pay neither.
 
 ## Interrupts and durability
 
@@ -351,8 +349,9 @@ flushed on a context that outlives the cancellation before the process exits
 
 Losing that flush is cheap, because state is never ahead of the bucket. A
 fetch records its state entry only after the object's `Close` returns, and
-`Close` is what commits the upload to B2, so every failure path leaves the
-key absent rather than falsely marked done. The invariant is that state is a
+`Close` is what commits the upload to B2; a write that fails is aborted
+instead, so no partial object is published. Every failure path leaves the key
+absent rather than falsely marked done. The invariant is that state is a
 subset of what is actually stored, which makes both failure modes safe in
 the same direction:
 
@@ -409,14 +408,18 @@ fronted without public ListBucket answers a key that is not there with
 AccessDenied rather than Not Found, which is how TCGplayer's CDN reports a
 product it holds no artwork for. A 403 that really is the host refusing us
 outright would be every request rather than one in seven, and that trips the
-consecutive-failure breaker, which takes back every marker the streak wrote. So does a response
-whose body is not an image: TCGplayer answers a missing product image with a
-70 byte "Not Found" page under HTTP 200 and a `Content-Type` of `image/jpeg`,
-so the status code says nothing and the body is the only honest part of it.
+consecutive-failure breaker, which takes back every marker the streak wrote.
+
+So does a response whose body is not an image: TCGplayer answers a missing
+product image with a 70 byte "Not Found" page under HTTP 200 and a
+`Content-Type` of `image/jpeg`, so the status code says nothing and the body
+is the only honest part of it.
+
 Both are recorded in state with `"missing": true` and no digest, so
-`NeedFetch` skips them on later runs. Without that, every one would be
-re-requested on every run forever, with a failure logged for each. They are logged as a count rather than a line each, are reported as
-`notPublished` separately from `fetchFailed`, and do not fail the run.
+`NeedFetch` skips them on later runs; without that, every one would be
+re-requested on every run forever, with a failure logged for each. They are
+logged as a count rather than a line each, are reported as `notPublished`
+separately from `fetchFailed`, and do not fail the run.
 
 The marker is keyed on the source URL like any other entry, so it is not
 permanent in the wrong way: if the URL changes — a Scryfall reprocess bumping
