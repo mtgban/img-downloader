@@ -9,7 +9,7 @@ require (
 	github.com/chai2010/webp v1.4.0
 	github.com/mtgban/go-mtgban v0.9.3
 	github.com/mtgban/simplecloud v0.1.1
-	golang.org/x/image v0.45.0
+	golang.org/x/image v0.46.0
 )
 
 require (
