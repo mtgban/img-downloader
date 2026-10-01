@@ -1,7 +1,8 @@
 package mirror
 
 import (
-	"reflect"
+	"maps"
+	"slices"
 	"testing"
 )
 
@@ -24,7 +25,7 @@ func TestNeedFetch(t *testing.T) {
 	state, want := planFixture()
 	got := NeedFetch(state, want)
 	wantKeys := []string{"id-moved", "id-new", "p-SLX-1"}
-	if !reflect.DeepEqual(got, wantKeys) {
+	if !slices.Equal(got, wantKeys) {
 		t.Errorf("NeedFetch = %v, want %v", got, wantKeys)
 	}
 }
@@ -35,7 +36,7 @@ func TestSetDigestsSkipsUnfetched(t *testing.T) {
 	wantMap := map[string]map[string]string{
 		"NEO": {"id-done": "d1", "id-moved": "d2"},
 	}
-	if !reflect.DeepEqual(got, wantMap) {
+	if !maps.EqualFunc(got, wantMap, maps.Equal) {
 		t.Errorf("SetDigests = %v, want %v", got, wantMap)
 	}
 }
@@ -52,7 +53,7 @@ func TestBundlesToRebuild(t *testing.T) {
 	}
 	got := BundlesToRebuild(m, digests)
 	want := []string{"MID", "VOW"}
-	if !reflect.DeepEqual(got, want) {
+	if !slices.Equal(got, want) {
 		t.Errorf("BundlesToRebuild = %v, want %v", got, want)
 	}
 }
@@ -64,7 +65,7 @@ func TestDomains(t *testing.T) {
 		"images.example.invalid":       3,
 		"product-images.tcgplayer.com": 1,
 	}
-	if !reflect.DeepEqual(got, wantMap) {
+	if !maps.Equal(got, wantMap) {
 		t.Errorf("Domains = %v, want %v", got, wantMap)
 	}
 }
@@ -81,7 +82,7 @@ func TestNeedFetchSeesAnObjectThatMoved(t *testing.T) {
 	want := map[string]Image{
 		"p-SLX-1": {Key: "p-SLX-1", URL: src, ObjectPath: "sealed/SLX/1.webp", SetCode: "SLX"},
 	}
-	if got := NeedFetch(state, want); !reflect.DeepEqual(got, []string{"p-SLX-1"}) {
+	if got := NeedFetch(state, want); !slices.Equal(got, []string{"p-SLX-1"}) {
 		t.Errorf("NeedFetch = %v, want the moved image refetched", got)
 	}
 
@@ -108,7 +109,7 @@ func TestNeedFetchJudgesLegacyEntriesByTheirSource(t *testing.T) {
 		"single":  {Key: "single", URL: "https://cards.scryfall.io/grid/front/a/b/single.webp?123", ObjectPath: "singles/grid/front/a/b/single.webp", SetCode: "NEO"},
 		"p-SLX-1": {Key: "p-SLX-1", URL: "https://product-images.tcgplayer.com/1.jpg", ObjectPath: "sealed/SLX/1.webp", SetCode: "SLX"},
 	}
-	if got := NeedFetch(state, want); !reflect.DeepEqual(got, []string{"p-SLX-1"}) {
+	if got := NeedFetch(state, want); !slices.Equal(got, []string{"p-SLX-1"}) {
 		t.Errorf("NeedFetch = %v, want only the jpeg-backed image refetched", got)
 	}
 }
@@ -162,7 +163,7 @@ func TestRecordObjectPathsFillsOnlyEntriesInPlace(t *testing.T) {
 		t.Errorf("unwanted entry ObjectPath = %q, want it left alone", got)
 	}
 	// recording changes nothing NeedFetch decides
-	if got := NeedFetch(state, want); !reflect.DeepEqual(got, []string{"p-SLX-1"}) {
+	if got := NeedFetch(state, want); !slices.Equal(got, []string{"p-SLX-1"}) {
 		t.Errorf("NeedFetch = %v, want only the jpeg-backed image", got)
 	}
 }

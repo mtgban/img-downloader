@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	"github.com/mtgban/go-mtgban/mtgmatcher"
-	"reflect"
 	"testing"
 
 	"github.com/mtgban/img-downloader/internal/mirror"
@@ -64,7 +63,7 @@ func TestSortedSetCodes(t *testing.T) {
 		"d": {Key: "d"},
 	}
 	got := source.SortedSetCodes(want)
-	if !reflect.DeepEqual(got, []string{"MID", "NEO"}) {
+	if !slices.Equal(got, []string{"MID", "NEO"}) {
 		t.Errorf("SortedSetCodes = %v, want [MID NEO]", got)
 	}
 }
@@ -77,7 +76,7 @@ func TestWantIsAMirrorImageMap(t *testing.T) {
 	if plain["a"].Key != "a" {
 		t.Errorf("plain[a] = %+v", plain["a"])
 	}
-	if got := mirror.NeedFetch(mirror.State{}, want); !reflect.DeepEqual(got, []string{"a"}) {
+	if got := mirror.NeedFetch(mirror.State{}, want); !slices.Equal(got, []string{"a"}) {
 		t.Errorf("NeedFetch(want) = %v, want [a]", got)
 	}
 }

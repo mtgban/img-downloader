@@ -1,7 +1,7 @@
 package magic_test
 
 import (
-	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/mtgban/img-downloader/internal/mirror"
@@ -47,11 +47,11 @@ func TestBuildWantSingles(t *testing.T) {
 	}
 
 	if _, ok := want["d27cf7b7-7982-46bd-a559-7789c0e74bae"]; !ok {
-		t.Errorf("want missing d27cf7b7-7982-46bd-a559-7789c0e74bae from unfiltered MID set")
+		t.Error("want missing d27cf7b7-7982-46bd-a559-7789c0e74bae from unfiltered MID set")
 	}
 
 	wantMissing := []string{"0050b693-7bad-4c0c-baca-0186d153ce2e"}
-	if !reflect.DeepEqual(missing, wantMissing) {
+	if !slices.Equal(missing, wantMissing) {
 		t.Errorf("missing = %v, want %v", missing, wantMissing)
 	}
 }
@@ -108,13 +108,13 @@ func TestBuildWantFilter(t *testing.T) {
 	want, missing, _ := magic.BuildWant(buildWantFixture(), buildWantScryURL(), filter)
 
 	if _, ok := want["d27cf7b7-7982-46bd-a559-7789c0e74bae"]; ok {
-		t.Errorf("filtered MID set should not contribute d27cf7b7-7982-46bd-a559-7789c0e74bae")
+		t.Error("filtered MID set should not contribute d27cf7b7-7982-46bd-a559-7789c0e74bae")
 	}
 	if _, ok := want["7673784e-db4b-43a1-8d55-1bb9fc1e284f"]; !ok {
-		t.Errorf("filtered want should still include NEO 7673784e-db4b-43a1-8d55-1bb9fc1e284f")
+		t.Error("filtered want should still include NEO 7673784e-db4b-43a1-8d55-1bb9fc1e284f")
 	}
 	wantMissing := []string{"0050b693-7bad-4c0c-baca-0186d153ce2e"}
-	if !reflect.DeepEqual(missing, wantMissing) {
+	if !slices.Equal(missing, wantMissing) {
 		t.Errorf("missing = %v, want %v", missing, wantMissing)
 	}
 }
