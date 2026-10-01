@@ -157,8 +157,6 @@ func (p *Provider) wantFromBackend(backend *mtgmatcher.Backend, setsFilter map[s
 // datastoreImageKey); change both together.
 //
 // It reads fields, never the uuid's shape, which the datastore may respell.
-// Keyed apart, a set level uuid here and a cut uuid there, 115,429 of the
-// 140,047 singles the website listed asked for a key this never filed.
 func singleKey(co *mtgmatcher.CardObject) string {
 	return mtgmatcher.ProductKeyOf(co.Identifiers, mtgmatcher.PrintingKey(co.Card))
 }

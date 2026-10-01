@@ -6,7 +6,8 @@ bucket, tracking fetch state so reruns only pull what changed.
 
 It mirrors one game per run, chosen with `-game`. Magic is built from the
 public MTGJSON and Scryfall bulk exports; every other game is built from
-mtgban's own datastore, the same document the website loads.
+mtgban's own datastore, the same document the website loads. Only Magic is
+mirrored in production; see *Other games*.
 
 ## What it does
 
@@ -25,13 +26,13 @@ mtgban's own datastore, the same document the website loads.
   `tcgplayerProductId` lists, then joins them.
 - **Datastore** (`internal/source/datastore`) reads one game's datastore
   document with `mtgmatcher.Open` and takes each card's product and its
-  `full` image URL straight from it. Lorcana and Riftbound are wired up. Nothing
-  parses that document by hand, so this tool and the website cannot drift
-  apart on its schema.
+  `full` image URL straight from it. Nothing parses that document by hand, so
+  this tool and the website cannot drift apart on its schema.
 
-Adding a game means writing a `source.Provider` and listing it in
-`source.Games()`; nothing in `internal/mirror` knows which game it is
-mirroring.
+`source.Games()` is whatever games the pinned go-mtgban registers a loader
+for, so a datastore game added upstream needs only the dependency bumped. A
+game with some other source needs a `source.Provider` of its own; nothing in
+`internal/mirror` knows which game it is mirroring.
 
 ## Bucket layout contract
 
@@ -54,8 +55,7 @@ next run.
   `c1`/`c2` are the first two characters of the id. Built from the id rather
   than from Scryfall's URL, so the layout is the mirror's own and pairs with
   `sealed/`; a key that is not a scryfall id is rejected rather than used to
-  place an object. This happens to match where Scryfall files the same image,
-  under `normal/` instead of `singles/`.
+  place an object.
 - Sealed object path: `sealed/<SETCODE>/<tcgplayerProductId>.webp` (SETCODE is
   the uppercase MTGJSON code). Sealed sits under one shared prefix so the
   bucket root holds only the few top level trees rather than a directory per
@@ -77,19 +77,14 @@ next run.
   are not the bytes served — see *Stored format*.
   A key is refetched when its stored `source` differs from the currently wanted
   URL, or when its `objectPath` does: a source url alone cannot see an object
-  that moved, and converting the corpus to webp moved every object stored in
-  its source's own format without changing one url. Entries written before
-  `objectPath` was recorded are judged by their source's extension, which is a
-  faithful account of what was stored back when bytes were written through
-  untouched. Sealed URLs never change, so sealed images are fetch-once.
+  that a format or layout change moved. Entries with no `objectPath` are
+  judged by their source's extension instead. Sealed URLs never change, so
+  sealed images are fetch-once.
   `source` keeps the whole Scryfall URL including its `?<epoch>` query, which
   Scryfall bumps whenever it reprocesses an image, so a reprocess is what
-  triggers the refetch. The object path is derived from the URL path only, so
+  triggers the refetch. The object path is built from the id, not the URL, so
   the refetch overwrites in place rather than orphaning a second object, and
-  the new sha256 changes the set's bundle hash so the zip rebuilds too. Note
-  that this tracks reprocessing, not relocation: were Scryfall to change the
-  path rather than the query, the new object is written correctly but the old
-  one is left behind.
+  the new sha256 changes the set's bundle hash so the zip rebuilds too.
 - Singles are Scryfall's `grid` variant: their own webp encode at the same
   488x680 as the `normal` jpg, for a little over half the bytes (ARB measured
   20,967,673 -> 9,534,479, 54.5% smaller). Those are stored exactly as served,
@@ -113,7 +108,8 @@ reports and deletes nothing by default. Four things accumulate:
 - `sealed/**/*.jpg` — superseded when sealed began being converted to webp.
   These share a directory with their replacements, so this is the one case that
   can never be a prefix delete.
-- `bundles/**` — generations from before the run started removing them.
+- `bundles/**` — any generation the manifest does not name, such as one whose
+  removal failed during a rebuild.
 
 Nothing is deleted unless its replacement is present, which is the whole safety
 model: an orphan is only an orphan because something newer took its place, so
@@ -155,8 +151,8 @@ A source the mirror cannot decode is a failed fetch, not a stored object.
 
 ### Datastore-backed games (everything except Magic)
 
-Same tree shape, different key namespace, because these games' ids are not
-scryfall ids.
+Not mirrored in production yet; see *Other games*. Same tree shape, different
+key namespace, because these games' ids are not scryfall ids.
 
 - Image key for a single is its TCGplayer product id (`tcgplayerProductId`),
   or for a card that names no product, the key its finishes share
@@ -170,19 +166,17 @@ scryfall ids.
   does; these games publish one image per card rather than a set of encodes.
 - Sealed object path: `sealed/<SETCODE>/<uuid>.webp`, the same shape Magic's
   sealed takes, so one layout describes the bucket whatever game wrote it.
-  The *key* still carries no set code: Lorcana set codes can be a single
-  character and its product ids contain dashes (`1` and `1-600001`), so
-  `p-1-1-600001` has no unambiguous split. That only ever mattered because the
-  website used to turn a key back into an object path; clients read whole
-  bundles now, and every path in one comes from the want-list, which knows the
-  set code.
+  The *key* carries no set code: Lorcana set codes can be a single character
+  and its product ids contain dashes (`1` and `1-600001`), so `p-1-1-600001`
+  would have no unambiguous split. Nothing turns a key back into a path, since
+  every path a bundle reads comes from the want-list.
 - `<c1>/<c2>` are the first two characters of the key, a key shorter than two
   characters being left-padded (`7` files under `0/7`) so every game has the
   same tree depth.
 - The extension is always `webp`, whatever the CDN served: these games publish
   jpg and png, and the mirror converts on the way in. See *Stored format*.
-- The set code is still recorded on each image and is what the manifest is
-  keyed by; it is simply not in the object path.
+- The set code is recorded on each image and is what the manifest is keyed
+  by; it is in the sealed object path but not the singles one.
 - Every finish of a product is an entry of its own in mtgmatcher
   (`dtd011_502592` and `dtd011_502592_rainbowfoil`), and they share one image.
   The mirror walks those entries the way the website's catalog does and files
@@ -193,7 +187,7 @@ scryfall ids.
 ## Usage
 
 ```
-B2_BUCKET=<b2://bucket/prefix or local-dir> go run ./cmd/imgdl [-game NAME] [-sets CSV] [-dry-run] [-skip-sealed]
+B2_BUCKET=<b2://bucket/prefix or local-dir> go run ./cmd/imgdl [flags]
 ```
 
 Example local dev invocations:
@@ -214,7 +208,6 @@ B2_BUCKET=./tmp-lorcana IMGDL_DATASTORE=./lorcana.json.xz \
   namespace, so an unknown value is refused rather than guessed at.
 - `-sets`: comma-separated set codes to mirror; empty means all sets.
 - `-dry-run`: print the fetch plan without fetching or writing anything.
-- `-game`: which card game to mirror; also the bucket prefix written to.
 - `-skip-sealed`: skip the sealed product pass.
 - `-retry-missing`: forget the images a source answered it had none of, so
   this run asks again. A not-published marker keys on a URL that never
@@ -224,9 +217,6 @@ B2_BUCKET=./tmp-lorcana IMGDL_DATASTORE=./lorcana.json.xz \
   The manifest records what a bundle would contain, not that the object was
   written, so a manifest carried over from a build that stored no bundles
   matches perfectly and the ordinary diff finds no work to do.
-
-Both sealed flags are refused for a game whose provider mirrors no sealed
-images, rather than silently doing nothing.
 
 ### Environment variables
 
@@ -258,8 +248,8 @@ inputs. It needs two secrets, which it passes to imgdl as `B2_IMAGES_KEY` and
 - `B2_APPLICATION_KEY_ID_IMAGES`
 - `B2_APPLICATION_KEY_IMAGES`
 
-The cron fires with `game` unset, which means Magic — the scheduled run is
-unchanged. Concurrency is grouped per game, since two games write different
+The cron fires with `game` unset, which means Magic, the only game mirrored
+in production. Concurrency is grouped per game, since two games write different
 prefixes and do not conflict, while two runs of one game would fight over its
 state document.
 
@@ -281,16 +271,11 @@ Both are optional. Where they are unset the datastore falls back to the images
 key, for a deployment running one key across both buckets.
 
 `B2_BUCKET` is derived as `$B2_BUCKET_ROOT/<game>`, with `B2_BUCKET_ROOT`
-defaulting to `b2://mtgban-images`. An existing `B2_BUCKET` Actions variable
-still wins outright, so a deployment that already sets one keeps exactly the
-base it has today; org-level variables and secrets are picked up
+defaulting to `b2://mtgban-images`. A `B2_BUCKET` Actions variable wins
+outright; org-level variables and secrets are picked up
 automatically, no workflow edits needed. Pointing that override at one game's
 prefix and then dispatching another game fails on the `mirror-game.json`
 claim rather than corrupting either mirror.
-
-Mirroring a game other than Magic also needs `IMGDL_DATASTORE` for that game,
-which the workflow does not yet set — see the open cross-repo questions
-below.
 
 The job's `timeout-minutes` is 350, just under the 360 minute ceiling GitHub
 enforces on hosted runners. Steady-state daily runs finish in minutes. The
@@ -342,8 +327,8 @@ alphabetically-first sets being large ones, which puts the full pass in the
 region of four hours on its own. The manifest is therefore snapshotted every
 20 sets, on a context that outlives cancellation, and a cancelled rebuild
 returns immediately instead of walking the remainder failing every read.
-Without both, a run killed at its timeout lost every bundle it had built and
-the phase could never converge across runs however many you ran.
+Without both, a run killed at its timeout would lose every bundle it had
+built, and the phase could never converge across runs.
 
 Progress is reported every 30 seconds during the crawl, and every 20 bundles
 during the rebuild:
@@ -363,8 +348,9 @@ Two costs are specific to the first run. Every set's bundle is rebuilt
 because the manifest starts empty, and a rebuild reads its members back out
 of the bucket, so the run pulls all ~119k images down again (~30 GB of B2
 egress, the billed direction) and uploads a comparable volume of zips. And
-the state document reaches about 30 MB at full scale (~255 bytes per entry),
-rewritten whole on every snapshot — roughly 9 GB of writes across a backfill.
+the state document reaches about 40 MB at full scale (~120k entries of ~340
+bytes), rewritten whole on every snapshot — roughly 12 GB of writes across a
+backfill.
 That is B2 ingress, which is not billed, so it costs throughput rather than
 money. Steady-state daily runs rebuild only the sets that changed and so pay
 neither.
@@ -401,7 +387,7 @@ corrupted transfer surfaces as a `Close` error rather than a bad digest.
 
 Under the workflow's `timeout-minutes`, a cancelled job gets only a short
 grace period (the runner escalates SIGINT to SIGTERM to SIGKILL over roughly
-ten seconds), which a ~30 MB state flush may not fit inside. The periodic
+ten seconds), which a ~40 MB state flush may not fit inside. The periodic
 snapshot is the real safety net there, not the final flush.
 
 ### Aborting on a broken source
@@ -441,10 +427,8 @@ whose body is not an image: TCGplayer answers a missing product image with a
 70 byte "Not Found" page under HTTP 200 and a `Content-Type` of `image/jpeg`,
 so the status code says nothing and the body is the only honest part of it.
 Both are recorded in state with `"missing": true` and no digest, so
-`NeedFetch` skips them on later runs. Without that, every one would be re-requested on every run
-forever: roughly 840 doomed requests a day, about 84 seconds of a run, and a
-wall of alarming log lines each morning for images that are simply not
-coming. They are logged as a count rather than a line each, are reported as
+`NeedFetch` skips them on later runs. Without that, every one would be
+re-requested on every run forever, with a failure logged for each. They are logged as a count rather than a line each, are reported as
 `notPublished` separately from `fetchFailed`, and do not fail the run.
 
 The marker is keyed on the source URL like any other entry, so it is not
@@ -459,29 +443,6 @@ back before the run ends. A host failing every request is broken, not
 authoritative about what it publishes, and since a sealed URL never changes
 there would be nothing to trigger a retry of anything it was wrongly asked
 about during an outage.
-
-## Moving the singles object path
-
-Unlike sealed, this one is a plain prefix rename: `normal/...` becomes
-`singles/...` with everything below it unchanged. That makes it a bucket-side
-move rather than a refetch, which matters at ~116k images — re-pulling them
-from Scryfall would take about eleven hours on a runner, for bytes already
-sitting in the bucket.
-
-State never records where an object was put, only its source URL and digest,
-so a move leaves state correct: the next run's diff sees nothing to do, and
-bundle rebuilds read the new location.
-
-Do the move and the deploy close together. In between, a run would still fetch
-nothing, but any set whose bundle needed rebuilding would look for images at
-whichever path the running binary was built with.
-
-## Sealed images
-
-Sealed product URLs come from TCGplayer and never change for a given
-`tcgplayerProductId`, so once a sealed image is fetched it is never
-refetched (fetch-once semantics). Singles are refetched only when their
-Scryfall source URL changes.
 
 ## Known limitation: originalScryfallId overrides
 
@@ -499,54 +460,14 @@ which is 40% more resolution than what is stored today and still smaller than
 the `normal` jpg. Every variant carries the same `?<epoch>`, so switching one
 is a want-list change that the diff picks up on its own.
 
-## Open cross-repo question: serving non-Magic images
+## Other games
 
-The write side is only half of this. The website serves mirrored images from
-`internal/offlineapi/images.go` (on its unmerged `offline-mode` branch), and
-that handler cannot serve a non-Magic image today. Nothing here changes the
-Magic path it already serves, but the datastore-backed games need a decision
-on the read side before their images are reachable. Three things block them:
+Only Magic is mirrored in production. The datastore games run end to end
+through `-game` and the workflow's `game` input, but the website cannot serve
+their images yet, so the scheduled run mirrors Magic alone.
 
-1. **Key validation.** `serveImage` gates `.webp` requests on
-   `^[0-9a-f]{8}-...$` and `.jpg` requests on `^p-([0-9A-Z]{2,6})-([0-9]+)$`.
-   A Lorcana uuid (`460`) or a Riftbound one (`ogn-066-298`) matches neither,
-   so the request 404s before the bucket is touched.
-2. **Extension as discriminator.** The handler treats `.webp` as "single" and
-   `.jpg` as "sealed". That holds only because Magic's singles are always
-   Scryfall webp and its sealed always TCGplayer jpg. These games serve
-   whatever their CDN serves, so the two axes have to come apart: the `p-`
-   prefix already determines singles-vs-sealed on its own, and the extension
-   should just be the stored object's.
-3. **`catalog.go`'s `imageKey`.** It derives the key as
-   `path.Base(co.Images["full"])` minus `.jpg`. For Magic that happens to
-   yield the scryfallId, because a Scryfall URL is named for the card. For
-   these games it yields a CDN filename that names nothing — so the catalog
-   would advertise a key the mirror never wrote, and the client would request
-   an image that 404s forever. It validates nothing, so this fails silently.
-
-**What this PR assumes, and why.** The mirror keys non-Magic images by the
-card's own mtgmatcher uuid and derives every object path from the key alone
-(see the layout contract above). That keeps one route, one bucket layout and
-one path builder for all games, and confines the website's change to
-validation: relax the single-key pattern per game, split the extension from
-the singles/sealed decision, and switch `imageKey` to `co.UUID` for non-Magic
-games. `images_path` is already per-deployment config, so each game's prefix
-needs no new plumbing there.
-
-The alternative considered was keying non-Magic singles by the image URL's
-basename, which would leave `imageKey` untouched. It was rejected because the
-key would then be a property of whatever URL the CDN currently serves rather
-than of the card: a CDN reshuffle would re-key the entire mirror, and nothing
-else in the system could name an image without first knowing its URL.
-
-Two smaller things worth deciding at the same time:
-
-- The handler indexes `key[0:1]` and `key[1:2]` after matching. Any relaxed
-  pattern that admits a one-character key panics there unless it pads the
-  same way `mirror.shard` does.
-- Lorcana set codes can be a single character (`1`), so the manifest's set
-  keys are not `^[0-9A-Z]{2,6}$` either. That is only a manifest concern here,
-  since no non-Magic object path contains a set code.
-
-None of this is settled — it is a cross-repo contract, and this PR implements
-the mirror side of one proposal rather than declaring it decided.
+The key a datastore single is filed under (`singleKey` in
+`internal/source/datastore`) is a contract with the website's offline
+catalog, which computes the same expression in `internal/offlineapi`'s
+`datastoreImageKey`. Whatever the website settles on for serving these games
+has to keep the two in step.

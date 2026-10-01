@@ -117,7 +117,7 @@ func RebuildBundles(ctx context.Context, bucket simplecloud.ReadWriter, base str
 				//
 				// A bundle nothing points at is dead weight of roughly the
 				// size of the set it covers, since bundles are stored
-				// uncompressed, and until now nothing ever removed one. Losing
+				// uncompressed, and nothing else removes one. Losing
 				// the delete is not worth failing a rebuild that may have run
 				// for hours: a client asking for a bundle that is gone treats
 				// it as one the mirror has not published and moves on.
