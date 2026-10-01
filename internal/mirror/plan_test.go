@@ -93,24 +93,16 @@ func TestNeedFetchSeesAnObjectThatMoved(t *testing.T) {
 	}
 }
 
-// Entries predating ObjectPath carry only their source, and for those the
-// source's extension is a faithful account of what was stored, because the
-// mirror wrote fetched bytes through untouched. That is what lets the first
-// converting run pick out exactly the objects that need moving instead of
-// refetching a 120k image bucket to find out.
-func TestNeedFetchJudgesLegacyEntriesByTheirSource(t *testing.T) {
-	state := State{
-		// Scryfall already served webp, so this one is already where it belongs
-		"single": {Digest: "d1", Source: "https://cards.scryfall.io/grid/front/a/b/single.webp?123"},
-		// TCGplayer served jpg, so this one was stored as jpg and has to move
-		"p-SLX-1": {Digest: "d2", Source: "https://product-images.tcgplayer.com/1.jpg"},
-	}
+// An entry that records no path cannot say where its object is, so it is
+// fetched once more and records one.
+func TestNeedFetchRefetchesEntriesWithNoObjectPath(t *testing.T) {
+	const scry = "https://cards.scryfall.io/grid/front/a/b/single.webp?123"
+	state := State{"single": {Digest: "d1", Source: scry}}
 	want := map[string]Image{
-		"single":  {Key: "single", URL: "https://cards.scryfall.io/grid/front/a/b/single.webp?123", ObjectPath: "singles/grid/front/a/b/single.webp", SetCode: "NEO"},
-		"p-SLX-1": {Key: "p-SLX-1", URL: "https://product-images.tcgplayer.com/1.jpg", ObjectPath: "sealed/SLX/1.webp", SetCode: "SLX"},
+		"single": {Key: "single", URL: scry, ObjectPath: "singles/grid/front/a/b/single.webp", SetCode: "NEO"},
 	}
-	if got := NeedFetch(state, want); !slices.Equal(got, []string{"p-SLX-1"}) {
-		t.Errorf("NeedFetch = %v, want only the jpeg-backed image refetched", got)
+	if got := NeedFetch(state, want); !slices.Equal(got, []string{"single"}) {
+		t.Errorf("NeedFetch = %v, want an entry with no recorded path refetched", got)
 	}
 }
 
@@ -127,43 +119,5 @@ func TestNeedFetchLeavesMissingMarkersAlone(t *testing.T) {
 	}
 	if got := NeedFetch(state, want); len(got) != 0 {
 		t.Errorf("NeedFetch = %v, want the missing marker left alone", got)
-	}
-}
-
-func TestRecordObjectPathsFillsOnlyEntriesInPlace(t *testing.T) {
-	const scry = "https://cards.scryfall.io/grid/front/a/b/single.webp?123"
-	state := State{
-		"single":  {Digest: "d1", Source: scry},
-		"p-SLX-1": {Digest: "d2", Source: "https://product-images.tcgplayer.com/1.jpg"},
-		"p-SLX-2": {Source: "https://product-images.tcgplayer.com/2.jpg", Missing: true},
-		"known":   {Digest: "d3", Source: scry, ObjectPath: "singles/grid/front/k/n/known.webp"},
-		"gone":    {Digest: "d4", Source: scry},
-	}
-	want := map[string]Image{
-		"single":  {Key: "single", URL: scry, ObjectPath: "singles/grid/front/a/b/single.webp", SetCode: "NEO"},
-		"p-SLX-1": {Key: "p-SLX-1", URL: "https://product-images.tcgplayer.com/1.jpg", ObjectPath: "sealed/SLX/1.webp", SetCode: "SLX"},
-		"p-SLX-2": {Key: "p-SLX-2", URL: "https://product-images.tcgplayer.com/2.jpg", ObjectPath: "sealed/SLX/2.webp", SetCode: "SLX"},
-		"known":   {Key: "known", URL: scry, ObjectPath: "singles/grid/front/k/n/known.webp", SetCode: "NEO"},
-	}
-
-	if n := RecordObjectPaths(state, want); n != 1 {
-		t.Errorf("RecordObjectPaths = %d, want 1", n)
-	}
-	if got := state["single"].ObjectPath; got != "singles/grid/front/a/b/single.webp" {
-		t.Errorf("single ObjectPath = %q, want it recorded", got)
-	}
-	// stored as jpg, so it is not where this run wants it and is left to be refetched
-	if got := state["p-SLX-1"].ObjectPath; got != "" {
-		t.Errorf("p-SLX-1 ObjectPath = %q, want it left empty", got)
-	}
-	if got := state["p-SLX-2"].ObjectPath; got != "" {
-		t.Errorf("missing marker ObjectPath = %q, want it left empty", got)
-	}
-	if got := state["gone"].ObjectPath; got != "" {
-		t.Errorf("unwanted entry ObjectPath = %q, want it left alone", got)
-	}
-	// recording changes nothing NeedFetch decides
-	if got := NeedFetch(state, want); !slices.Equal(got, []string{"p-SLX-1"}) {
-		t.Errorf("NeedFetch = %v, want only the jpeg-backed image", got)
 	}
 }

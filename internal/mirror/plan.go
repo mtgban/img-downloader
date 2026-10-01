@@ -2,9 +2,7 @@ package mirror
 
 import (
 	"net/url"
-	"path"
 	"sort"
-	"strings"
 )
 
 // Image is one wanted mirror entry. A provider supplies every field: the
@@ -34,51 +32,13 @@ func NeedFetch(state State, want map[string]Image) []string {
 // misfiled reports whether the stored object sits somewhere other than where
 // this run wants it, which comparing source urls cannot see: a change of
 // stored format or layout moves objects without changing the url they are
-// fetched from.
+// fetched from. An entry that records no path is treated as misfiled, so it
+// is fetched once more and records one.
 //
 // A missing marker records that a source had no image rather than an object on
 // disk, so it is nothing to move; RetryMissing is what asks those again.
-//
-// Entries written before ObjectPath was recorded have only their source to go
-// on, and for those the source's extension is a faithful account of what was
-// stored, because the mirror wrote fetched bytes through untouched.
 func misfiled(prev StateEntry, img Image) bool {
-	if prev.Missing {
-		return false
-	}
-	if prev.ObjectPath != "" {
-		return prev.ObjectPath != img.ObjectPath
-	}
-	return urlExt(prev.Source) != path.Ext(img.ObjectPath)
-}
-
-// RecordObjectPaths fills in ObjectPath on wanted entries that have none and
-// that misfiled judges to be where this run wants them, returning how many.
-// Once every entry records its path, misfiled no longer needs the source
-// extension to judge any of them.
-func RecordObjectPaths(state State, want map[string]Image) int {
-	n := 0
-	for key, img := range want {
-		prev, found := state[key]
-		if !found || prev.Missing || prev.ObjectPath != "" || misfiled(prev, img) {
-			continue
-		}
-		prev.ObjectPath = img.ObjectPath
-		state[key] = prev
-		n++
-	}
-	return n
-}
-
-// urlExt is the extension of a url's path, lowercased and with its dot, so a
-// query string (Scryfall stamps an epoch on every image url) is not mistaken
-// for part of it.
-func urlExt(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return ""
-	}
-	return strings.ToLower(path.Ext(u.Path))
+	return !prev.Missing && prev.ObjectPath != img.ObjectPath
 }
 
 // SetDigests groups the already fetched wanted keys by set code.
