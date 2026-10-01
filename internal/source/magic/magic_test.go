@@ -142,19 +142,15 @@ func TestBuildWantURLChangeTriggersNeedFetch(t *testing.T) {
 // existing mirror-state.json, so the identity the mirror keys on — the image
 // key and its source URL — is pinned here rather than left to the object-path
 // tests.
-func TestProviderIsMagicAndSealedAware(t *testing.T) {
+func TestProviderIsMagic(t *testing.T) {
 	var p source.Provider = &magic.Provider{}
 	if p.Game() != source.Magic {
 		t.Errorf("Game() = %q, want %q", p.Game(), source.Magic)
 	}
-	sealed, ok := p.(source.SealedAware)
-	if !ok {
-		t.Fatal("magic.Provider does not implement source.SealedAware")
+	if key := mirror.SealedKey("NEO", "111"); key != "p-NEO-111" || !mirror.IsSealedKey(key) {
+		t.Errorf("SealedKey(NEO, 111) = %q, want p-NEO-111 recognised as sealed", key)
 	}
-	if !sealed.IsSealedKey("p-NEO-111") {
-		t.Error("IsSealedKey(p-NEO-111) = false, want true")
-	}
-	if sealed.IsSealedKey("7673784e-db4b-43a1-8d55-1bb9fc1e284f") {
+	if mirror.IsSealedKey("7673784e-db4b-43a1-8d55-1bb9fc1e284f") {
 		t.Error("IsSealedKey(scryfall id) = true, want false")
 	}
 }

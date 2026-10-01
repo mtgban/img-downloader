@@ -129,7 +129,4 @@ func TestNewProviderDatastoreGameFromLocalPath(t *testing.T) {
 	if p.Game() != source.Lorcana {
 		t.Errorf("Game() = %q, want lorcana", p.Game())
 	}
-	if _, ok := p.(source.SealedAware); !ok {
-		t.Error("datastore provider should be sealed aware")
-	}
 }

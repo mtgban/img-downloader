@@ -162,11 +162,6 @@ func run(ctx context.Context, cfg opts) error {
 		return err
 	}
 
-	sealed, sealedAware := provider.(source.SealedAware)
-	if !sealedAware && cfg.skipSealed {
-		return fmt.Errorf("-skip-sealed is not applicable to %s, which mirrors no sealed images", cfg.game)
-	}
-
 	want, err := provider.BuildWant(ctx, parseSets(cfg.sets))
 	if err != nil {
 		return err
@@ -183,10 +178,6 @@ func run(ctx context.Context, cfg opts) error {
 		RebuildBundles: cfg.rebuildBundles,
 		Log:            log.Default(),
 	}
-	if sealedAware {
-		mirrorOpts.IsSealedKey = sealed.IsSealedKey
-	}
-
 	result, runErr := mirror.Run(ctx, mirrorOpts)
 	fmt.Printf("game=%s pending=%d fetched=%d notPublished=%d fetchFailed=%d bundlesRebuilt=%d\n",
 		cfg.game, result.Pending, result.Fetched, result.NotPublished, result.FetchFailed, result.BundlesRebuilt)

@@ -283,13 +283,6 @@ func TestProviderImplementsSourceInterfaces(t *testing.T) {
 	if p.Game() != source.Riftbound {
 		t.Errorf("Game() = %q", p.Game())
 	}
-	sealed, ok := any(p).(source.SealedAware)
-	if !ok {
-		t.Fatal("datastore.Provider does not implement source.SealedAware")
-	}
-	if !sealed.IsSealedKey("p-ogn-600001") || sealed.IsSealedKey("652968") {
-		t.Error("IsSealedKey did not separate sealed from singles")
-	}
 }
 
 type stubBucket struct{}
