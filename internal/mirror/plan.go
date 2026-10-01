@@ -32,9 +32,9 @@ func NeedFetch(state State, want map[string]Image) []string {
 }
 
 // misfiled reports whether the stored object sits somewhere other than where
-// this run wants it, which comparing source urls cannot see: converting the
-// corpus to webp moved every object the mirror had stored in its source's own
-// format without changing a single url to fetch it from.
+// this run wants it, which comparing source urls cannot see: a change of
+// stored format or layout moves objects without changing the url they are
+// fetched from.
 //
 // A missing marker records that a source had no image rather than an object on
 // disk, so it is nothing to move; RetryMissing is what asks those again.

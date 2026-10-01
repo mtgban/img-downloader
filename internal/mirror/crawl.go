@@ -81,11 +81,9 @@ func (e notPublishedError) Error() string { return fmt.Sprintf("HTTP %d", e.stat
 // nothing and the body is the only honest part of the response. Retrying cannot
 // turn that into an image.
 //
-// Calling it a failure instead is what blocked the corpus: the fetch fails, so
-// no object is written, but the key stays in state and therefore in its set's
-// digests, so the bundle rebuild then asks the bucket for an object that was
-// never stored and 404s. One product with no artwork took its whole set's
-// bundle down on every run, permanently.
+// As a failure it would block its set's bundle: a key already in state keeps
+// its old entry when the refetch fails, so the key stays in the set's digests
+// and the rebuild asks for an object at a path that was never written.
 type undecodableError struct{ err error }
 
 func (e undecodableError) Error() string { return e.err.Error() }

@@ -1,8 +1,7 @@
 // Package magic provides the Magic want-list, sourced from the public MTGJSON
 // and Scryfall bulk exports.
 //
-// This is the original mirror path, unchanged in behaviour: MTGJSON enumerates
-// the sets, their cards' scryfallIds and their sealed products' TCGplayer ids,
+// MTGJSON enumerates the sets, their cards' scryfallIds and their sealed products' TCGplayer ids,
 // and Scryfall's default_cards bulk file supplies the front image URL for each
 // scryfallId. It is the one game not sourced from mtgban's own datastore.
 package magic

@@ -135,15 +135,9 @@ func GameSingleObjectPath(id, variant string) (string, error) {
 // under a directory per set code, the same shape Magic's does, so one layout
 // describes the bucket whatever game wrote it.
 //
-// This once sharded on the product id instead, to keep the object path
-// derivable from the key alone. The key cannot carry a set code — Lorcana set
-// codes can be a single character and its product ids contain dashes ("1" and
-// "1-600001"), so "p-1-1-600001" has no unambiguous split — and while the
-// website resolved image requests by turning a key back into a path, that
-// mattered. It no longer does: clients read whole bundles now, and every path
-// in one comes from the want-list, which knows the set code. Nothing derives a
-// path from a key any more, so the set code costs nothing and a bucket
-// browsable by set is worth having.
+// The key cannot carry the set code (GameSealedKey), so the path is not
+// derivable from the key; nothing needs it to be, since every path a bundle
+// reads comes from the want-list, which knows the set code.
 func GameSealedObjectPath(setCode, id string) (string, error) {
 	if !SafeSegment(setCode) {
 		return "", fmt.Errorf("mirror: %q is not usable as a set code", setCode)
@@ -156,7 +150,9 @@ func GameSealedObjectPath(setCode, id string) (string, error) {
 
 // GameSealedKey returns the manifest/state image key for a non-Magic sealed
 // product. It keeps Magic's p- prefix, so one predicate still separates sealed
-// from singles across every game, but carries only the product's own id.
+// from singles across every game, but carries only the product's own id: a set
+// code can be one character and a product id can contain dashes (Lorcana's "1"
+// and "1-600001"), so "p-1-1-600001" would have no unambiguous split.
 func GameSealedKey(id string) string { return "p-" + id }
 
 // SealedObjectPath returns the bucket object path for a sealed product image.

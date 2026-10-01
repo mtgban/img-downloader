@@ -40,12 +40,9 @@ const (
 
 // Games lists every game the tool can mirror, in a stable order.
 //
-// Read from what mtgmatcher registers rather than written out here, because a
-// list written out is a list to forget: fleshandblood, onepiece, yugioh and
-// pokemon each reached the site with a loader, a datastore and a deploy, and
-// none of them reached the mirror for three weeks, because nothing failed
-// when they did not. A game added upstream now needs the dependency bumped
-// and nothing else.
+// Read from what mtgmatcher registers rather than written out here, because
+// nothing fails when a list written out falls behind: a game added upstream
+// needs the dependency bumped and nothing else.
 //
 // The loaders arrive through the blank import above. Without it this is empty
 // and every run is refused, which is the failure that test asserts against.

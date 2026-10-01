@@ -60,8 +60,7 @@ jobs:
           # each game keeps its objects, state and manifest under its own
           # prefix; the tool refuses to write a prefix another game claimed
           GAME: ${{ inputs.game || 'magic' }}
-          # an existing B2_BUCKET variable still wins outright, so the Magic
-          # run keeps whatever base it has today; the root is only how a game
+          # a B2_BUCKET variable wins outright; the root is only how a game
           # that has no explicit variable gets its own prefix
           B2_BUCKET_EXPLICIT: ${{ vars.B2_BUCKET }}
           B2_BUCKET_ROOT: ${{ vars.B2_BUCKET_ROOT || 'b2://mtgban-images' }}
@@ -80,8 +79,8 @@ jobs:
           RETRY_MISSING: ${{ inputs.retry_missing }}
           REBUILD_BUNDLES: ${{ inputs.rebuild_bundles }}
         run: |
-          # B2_BUCKET stays the full base the tool writes to, unchanged in
-          # meaning; only how it is defaulted varies by game
+          # B2_BUCKET is the full base the tool writes to; only its default
+          # varies by game
           if [ -n "$B2_BUCKET_EXPLICIT" ]; then
             export B2_BUCKET="$B2_BUCKET_EXPLICIT"
           else
