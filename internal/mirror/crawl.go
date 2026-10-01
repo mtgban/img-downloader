@@ -40,6 +40,10 @@ const (
 	// natural run seen against TCGplayer's sealed images is ~13, from a couple
 	// of old sets sorting next to each other.
 	maxConsecutiveFailures = 50
+	// The largest source image a fetch will read. Card scans and product
+	// shots run to a few MB at most, so anything past this is not an image
+	// worth storing, and reading it whole would only spend memory.
+	maxImageBytes = 32 << 20
 )
 
 // ErrTooManyFailures aborts a run against a source that is failing every
@@ -117,6 +121,7 @@ type fetcher struct {
 	backoff          func(int) time.Duration
 	log              *log.Logger
 	maxConsecutive   int
+	maxBytes         int64
 	progressInterval time.Duration
 	total            int
 
@@ -141,6 +146,7 @@ func newFetcher(bucket simplecloud.ReadWriter, base string, state State, logger 
 		backoff:          Backoff,
 		log:              logger,
 		maxConsecutive:   maxConsecutiveFailures,
+		maxBytes:         maxImageBytes,
 		progressInterval: progressInterval,
 		state:            state,
 	}
@@ -376,8 +382,11 @@ func (f *fetcher) download(ctx context.Context, host, srcURL string) ([]byte, er
 
 		switch {
 		case resp.StatusCode == http.StatusOK:
-			data, err := io.ReadAll(resp.Body)
+			data, err := io.ReadAll(io.LimitReader(resp.Body, f.maxBytes+1))
 			resp.Body.Close()
+			if err == nil && int64(len(data)) > f.maxBytes {
+				return nil, fmt.Errorf("image larger than %d bytes", f.maxBytes)
+			}
 			return data, err
 		case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
 			resp.Body.Close()
