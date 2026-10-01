@@ -98,12 +98,12 @@ func TestGameObjectPathsRejectUnsafeSegments(t *testing.T) {
 		if got, err := mirror.GameSingleObjectPath(bad, "full"); err == nil {
 			t.Errorf("GameSingleObjectPath(%q) = %q, want an error", bad, got)
 		}
-		if got, err := mirror.GameSealedObjectPath("OGN", bad); err == nil {
-			t.Errorf("GameSealedObjectPath(OGN, %q) = %q, want an error", bad, got)
+		if got, err := mirror.SealedObjectPath("OGN", bad); err == nil {
+			t.Errorf("SealedObjectPath(OGN, %q) = %q, want an error", bad, got)
 		}
 		// the set code is a path segment too, so it is guarded the same way
-		if got, err := mirror.GameSealedObjectPath(bad, "ogn-600001"); err == nil {
-			t.Errorf("GameSealedObjectPath(%q, ...) = %q, want an error", bad, got)
+		if got, err := mirror.SealedObjectPath(bad, "ogn-600001"); err == nil {
+			t.Errorf("SealedObjectPath(%q, ...) = %q, want an error", bad, got)
 		}
 	}
 	// the variant is interpolated too
@@ -112,10 +112,10 @@ func TestGameObjectPathsRejectUnsafeSegments(t *testing.T) {
 	}
 }
 
-func TestGameSealedObjectPathAndKey(t *testing.T) {
-	got, err := mirror.GameSealedObjectPath("OGN", "ogn-600001")
+func TestSealedObjectPathAndGameSealedKey(t *testing.T) {
+	got, err := mirror.SealedObjectPath("OGN", "ogn-600001")
 	if err != nil || got != "sealed/OGN/ogn-600001.webp" {
-		t.Errorf("GameSealedObjectPath = %q, %v", got, err)
+		t.Errorf("SealedObjectPath = %q, %v", got, err)
 	}
 	key := mirror.GameSealedKey("ogn-600001")
 	if key != "p-ogn-600001" {
@@ -137,8 +137,8 @@ func TestMagicObjectPathsUnchanged(t *testing.T) {
 	if err != nil || got != "singles/grid/front/7/6/"+id+".webp" {
 		t.Errorf("SingleObjectPath = %q, %v", got, err)
 	}
-	if p := mirror.SealedObjectPath("NEO", "111"); p != "sealed/NEO/111.webp" {
-		t.Errorf("SealedObjectPath = %q", p)
+	if p, err := mirror.SealedObjectPath("NEO", "111"); err != nil || p != "sealed/NEO/111.webp" {
+		t.Errorf("SealedObjectPath = %q, %v", p, err)
 	}
 	if k := mirror.SealedKey("NEO", "111"); k != "p-NEO-111" {
 		t.Errorf("SealedKey = %q", k)

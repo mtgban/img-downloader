@@ -155,10 +155,15 @@ func BuildWant(sets []mtgjson.SetImages, scryURL map[string]string, setsFilter m
 				invalidSealed++
 				continue
 			}
+			objectPath, err := mirror.SealedObjectPath(s.Code, sealed.TcgplayerProductID)
+			if err != nil {
+				invalidSealed++
+				continue
+			}
 			want[key] = mirror.Image{
 				Key:        key,
 				URL:        fmt.Sprintf("https://product-images.tcgplayer.com/%s.jpg", sealed.TcgplayerProductID),
-				ObjectPath: mirror.SealedObjectPath(s.Code, sealed.TcgplayerProductID),
+				ObjectPath: objectPath,
 				SetCode:    s.Code,
 			}
 		}

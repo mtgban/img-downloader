@@ -131,14 +131,15 @@ func GameSingleObjectPath(id, variant string) (string, error) {
 	return fmt.Sprintf("singles/%s/front/%s/%s/%s.%s", variant, c1, c2, id, ImageExt), nil
 }
 
-// GameSealedObjectPath is SealedObjectPath for a non-Magic game: sealed sits
-// under a directory per set code, the same shape Magic's does, so one layout
-// describes the bucket whatever game wrote it.
+// SealedObjectPath returns the bucket object path for a sealed product image,
+// for every game: a directory per set code under one shared sealed/ prefix,
+// so the bucket root holds only the handful of top level trees. id is
+// TCGplayer's product id for Magic and the product's uuid for other games.
 //
-// The key cannot carry the set code (GameSealedKey), so the path is not
-// derivable from the key; nothing needs it to be, since every path a bundle
-// reads comes from the want-list, which knows the set code.
-func GameSealedObjectPath(setCode, id string) (string, error) {
+// A non-Magic key cannot carry the set code (GameSealedKey), so the path is
+// not derivable from the key; nothing needs it to be, since every path a
+// bundle reads comes from the want-list, which knows the set code.
+func SealedObjectPath(setCode, id string) (string, error) {
 	if !SafeSegment(setCode) {
 		return "", fmt.Errorf("mirror: %q is not usable as a set code", setCode)
 	}
@@ -154,13 +155,6 @@ func GameSealedObjectPath(setCode, id string) (string, error) {
 // code can be one character and a product id can contain dashes (Lorcana's "1"
 // and "1-600001"), so "p-1-1-600001" would have no unambiguous split.
 func GameSealedKey(id string) string { return "p-" + id }
-
-// SealedObjectPath returns the bucket object path for a sealed product image.
-// Sealed lives under one shared prefix rather than a directory per set code,
-// so the bucket root holds only the handful of top level trees.
-func SealedObjectPath(setCode, tcgID string) string {
-	return fmt.Sprintf("sealed/%s/%s.%s", setCode, tcgID, ImageExt)
-}
 
 // SealedKey returns the manifest/state image key for a sealed product.
 func SealedKey(setCode, tcgID string) string {

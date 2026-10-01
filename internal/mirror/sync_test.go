@@ -202,7 +202,7 @@ func TestRunRetryMissingAsksAgainForUnpublishedImages(t *testing.T) {
 	base := filepath.ToSlash(t.TempDir())
 	bucket := &simplecloud.FileBucket{}
 	want := map[string]Image{
-		"p-NEO-111": {Key: "p-NEO-111", URL: srv.URL + "/111.jpg", ObjectPath: SealedObjectPath("NEO", "111"), SetCode: "NEO"},
+		"p-NEO-111": {Key: "p-NEO-111", URL: srv.URL + "/111.jpg", ObjectPath: "sealed/NEO/111.webp", SetCode: "NEO"},
 		"card-a":    {Key: "card-a", URL: srv.URL + "/a.jpg", ObjectPath: "a/card-a.jpg", SetCode: "NEO"},
 	}
 
