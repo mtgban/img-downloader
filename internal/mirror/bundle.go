@@ -196,15 +196,7 @@ func rebuildOne(ctx context.Context, bucket simplecloud.ReadWriter, base string,
 		return ImageInfo{}, err
 	}
 	hash := BundleHash(digests)
-	writer, err := simplecloud.InitWriter(ctx, bucket, JoinPath(base, "bundles", code+"-"+hash+".zip"))
-	if err != nil {
-		return ImageInfo{}, err
-	}
-	if _, err := writer.Write(zipData); err != nil {
-		writer.Close()
-		return ImageInfo{}, err
-	}
-	if err := writer.Close(); err != nil {
+	if err := writeObject(ctx, bucket, JoinPath(base, BundleObjectPath(code, hash)), zipData); err != nil {
 		return ImageInfo{}, err
 	}
 	return ImageInfo{Hash: hash, Count: len(entries), Bytes: int64(len(zipData))}, nil

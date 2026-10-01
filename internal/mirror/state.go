@@ -1,9 +1,11 @@
 package mirror
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"log"
 
@@ -39,16 +41,36 @@ func loadBucketJSON(ctx context.Context, bucket simplecloud.Reader, base, name s
 	return nil
 }
 
+// saveBucketJSON encodes value before opening the object, so a value that
+// fails to encode leaves the stored document untouched.
 func saveBucketJSON(ctx context.Context, bucket simplecloud.Writer, base, name string, value any) error {
-	writer, err := simplecloud.InitWriter(ctx, bucket, JoinPath(base, name))
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(value); err != nil {
+		return err
+	}
+	return writeObject(ctx, bucket, JoinPath(base, name), buf.Bytes())
+}
+
+// writeObject stores data at path. A failed write is aborted rather than
+// closed, because Close is what publishes the object, truncated or not.
+func writeObject(ctx context.Context, bucket simplecloud.Writer, path string, data []byte) error {
+	writer, err := simplecloud.InitWriter(ctx, bucket, path)
 	if err != nil {
 		return err
 	}
-	if err := json.NewEncoder(writer).Encode(value); err != nil {
-		writer.Close()
-		return err
+	if _, err := writer.Write(data); err != nil {
+		return errors.Join(err, discard(writer))
 	}
 	return writer.Close()
+}
+
+// discard abandons a write, closing a writer that cannot abort, which is all
+// simplecloud itself does with one.
+func discard(w io.WriteCloser) error {
+	if a, ok := w.(simplecloud.Aborter); ok {
+		return a.Abort()
+	}
+	return w.Close()
 }
 
 // LoadState reads mirror-state.json from base, returning an empty map if missing.

@@ -96,3 +96,32 @@ func TestLoadManifestCorruptFileFails(t *testing.T) {
 		t.Fatal("expected error on corrupt manifest")
 	}
 }
+
+// failingWriter rejects every write and records how it was finished.
+type failingWriter struct {
+	aborted, closed bool
+}
+
+func (w *failingWriter) Write(p []byte) (int, error) { return 0, errors.New("connection reset") }
+func (w *failingWriter) Close() error                { w.closed = true; return nil }
+func (w *failingWriter) Abort() error                { w.aborted = true; return nil }
+
+// writeFailBucket hands out one failingWriter.
+type writeFailBucket struct{ w *failingWriter }
+
+func (b writeFailBucket) NewWriter(ctx context.Context, path string) (io.WriteCloser, error) {
+	return b.w, nil
+}
+
+// Close publishes on the cloud backends, so a failed write must be aborted:
+// a truncated mirror-state.json would fail to decode on every later run.
+func TestSaveStateAbortsFailedWrite(t *testing.T) {
+	w := &failingWriter{}
+	err := mirror.SaveState(context.Background(), writeFailBucket{w}, "base", mirror.State{"k": {Digest: "d"}})
+	if err == nil {
+		t.Fatal("SaveState succeeded on a failed write")
+	}
+	if !w.aborted || w.closed {
+		t.Errorf("aborted=%v closed=%v, want the write aborted and not closed", w.aborted, w.closed)
+	}
+}

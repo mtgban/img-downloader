@@ -309,16 +309,7 @@ func (f *fetcher) fetchOne(ctx context.Context, host string, img Image) error {
 	sum := sha256.Sum256(data)
 	digest := hex.EncodeToString(sum[:])
 
-	objPath := JoinPath(f.base, img.ObjectPath)
-	writer, err := simplecloud.InitWriter(ctx, f.bucket, objPath)
-	if err != nil {
-		return err
-	}
-	if _, err := writer.Write(data); err != nil {
-		writer.Close()
-		return err
-	}
-	if err := writer.Close(); err != nil {
+	if err := writeObject(ctx, f.bucket, JoinPath(f.base, img.ObjectPath), data); err != nil {
 		return err
 	}
 
