@@ -94,27 +94,14 @@ next run.
 
 ### Cleaning up
 
-Superseded bundles are removed by the run that supersedes them. Nothing else
-is: an image left behind by a layout or format change stays in the bucket,
-because the mirror writes to the path the current layout asks for and has no
-reason to look at the old one.
+Superseded bundles are removed by the run that supersedes them. A removal that
+fails is only logged, so a bundle the manifest no longer names can remain.
 
 `scripts/prune-bucket.sh` finds those and, with `--apply`, removes them. It
-reports and deletes nothing by default. Four things accumulate:
-
-- `singles/front/**` — pre-`grid` jpg singles, superseded by
-  `singles/grid/front/**`.
-- `normal/**` — from before singles moved out of Scryfall's own url path.
-- `sealed/**/*.jpg` — superseded when sealed began being converted to webp.
-  These share a directory with their replacements, so this is the one case that
-  can never be a prefix delete.
-- `bundles/**` — any generation the manifest does not name, such as one whose
-  removal failed during a rebuild.
-
-Nothing is deleted unless its replacement is present, which is the whole safety
-model: an orphan is only an orphan because something newer took its place, so
-if that newer object is missing the old one is still the only copy. The script
-holds those back and names them.
+reports and deletes nothing by default, and skips everything when it cannot
+read a usable `images-manifest.json`, since that is the only record of which
+bundles are current. Do not run it during a mirror run: a bundle that run has
+just built is not in the manifest until its next snapshot.
 
 ### Stored format
 
