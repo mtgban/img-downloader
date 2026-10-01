@@ -2,7 +2,6 @@ package mirror
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/mtgban/simplecloud"
@@ -21,21 +20,8 @@ var ErrGameMismatch = fmt.Errorf("mirror: bucket prefix belongs to a different g
 
 // LoadGameMarker returns the game recorded at base, or "" if none is recorded.
 func LoadGameMarker(ctx context.Context, bucket simplecloud.Reader, base string) (string, error) {
-	reader, err := simplecloud.InitReader(ctx, bucket, JoinPath(base, gameMarkerName))
-	if err != nil {
-		if isNotExist(err) {
-			return "", nil
-		}
-		return "", err
-	}
-	defer reader.Close()
-
 	var marker gameMarker
-	// B2 opens lazily, so a missing object surfaces here on first read.
-	if err := json.NewDecoder(reader).Decode(&marker); err != nil {
-		if isNotExist(err) {
-			return "", nil
-		}
+	if _, err := loadBucketJSON(ctx, bucket, base, gameMarkerName, &marker); err != nil {
 		return "", err
 	}
 	return marker.Game, nil
