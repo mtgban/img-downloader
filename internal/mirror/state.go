@@ -18,27 +18,36 @@ func isNotExist(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || b2.IsNotExist(err)
 }
 
-// loadBucketJSON decodes one JSON document; only a missing document is a
-// first run, any other failure is fatal so mirror state cannot silently reset.
-func loadBucketJSON(ctx context.Context, bucket simplecloud.Reader, base, name string, out any) error {
+// loadBucketJSON decodes one JSON document into out, reporting whether it
+// exists. Only a missing document is a first run; any other failure is fatal,
+// so mirror state cannot silently reset.
+func loadBucketJSON(ctx context.Context, bucket simplecloud.Reader, base, name string, out any) (bool, error) {
 	reader, err := simplecloud.InitReader(ctx, bucket, JoinPath(base, name))
 	if err != nil {
 		if isNotExist(err) {
-			log.Printf("%s missing, starting empty", name)
-			return nil
+			return false, nil
 		}
-		return err
+		return false, err
 	}
 	defer reader.Close()
 	// B2 opens lazily, so a missing object surfaces here on first read.
 	if err := json.NewDecoder(reader).Decode(out); err != nil {
 		if isNotExist(err) {
-			log.Printf("%s missing, starting empty", name)
-			return nil
+			return false, nil
 		}
-		return err
+		return false, err
 	}
-	return nil
+	return true, nil
+}
+
+// loadOrStartEmpty is loadBucketJSON for a document a first run starts
+// without, saying so in the log.
+func loadOrStartEmpty(ctx context.Context, bucket simplecloud.Reader, base, name string, out any) error {
+	found, err := loadBucketJSON(ctx, bucket, base, name, out)
+	if err == nil && !found {
+		log.Printf("%s missing, starting empty", name)
+	}
+	return err
 }
 
 // saveBucketJSON encodes value before opening the object, so a value that
@@ -76,7 +85,7 @@ func discard(w io.WriteCloser) error {
 // LoadState reads mirror-state.json from base, returning an empty map if missing.
 func LoadState(ctx context.Context, bucket simplecloud.Reader, base string) (State, error) {
 	state := State{}
-	if err := loadBucketJSON(ctx, bucket, base, "mirror-state.json", &state); err != nil {
+	if err := loadOrStartEmpty(ctx, bucket, base, "mirror-state.json", &state); err != nil {
 		return nil, err
 	}
 	return state, nil
@@ -90,7 +99,7 @@ func SaveState(ctx context.Context, bucket simplecloud.Writer, base string, stat
 // LoadManifest reads images-manifest.json from base, returning an empty map if missing.
 func LoadManifest(ctx context.Context, bucket simplecloud.Reader, base string) (Manifest, error) {
 	manifest := Manifest{}
-	if err := loadBucketJSON(ctx, bucket, base, "images-manifest.json", &manifest); err != nil {
+	if err := loadOrStartEmpty(ctx, bucket, base, "images-manifest.json", &manifest); err != nil {
 		return nil, err
 	}
 	return manifest, nil
