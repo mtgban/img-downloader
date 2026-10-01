@@ -663,3 +663,21 @@ func TestForbiddenEverywhereTripsTheBreakerAndKeepsNothing(t *testing.T) {
 		}
 	}
 }
+
+func TestDownloadRefusesAnImageOverTheCap(t *testing.T) {
+	body := testImage("jpegbytes")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	f := testFetcher(t)
+	f.maxBytes = int64(len(body))
+	if data, err := f.download(context.Background(), "test", srv.URL); err != nil || len(data) != len(body) {
+		t.Fatalf("download at the cap = %d bytes, %v; want the whole image", len(data), err)
+	}
+	f.maxBytes = int64(len(body)) - 1
+	if _, err := f.download(context.Background(), "test", srv.URL); err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("download over the cap = %v, want a size error", err)
+	}
+}
