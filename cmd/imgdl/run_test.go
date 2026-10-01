@@ -146,7 +146,7 @@ func TestRunMagicEndToEnd(t *testing.T) {
 		t.Fatalf("single not stored: %v", err)
 	}
 	if !bytes.HasPrefix(stored, []byte("RIFF")) || string(stored[8:12]) != "WEBP" {
-		t.Errorf("stored single is not webp")
+		t.Error("stored single is not webp")
 	}
 
 	var state mirror.State
