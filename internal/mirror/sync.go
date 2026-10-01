@@ -61,10 +61,6 @@ func Run(ctx context.Context, opts Opts) (Result, error) {
 		logger.Printf("re-asking for %d images previously not published at source", forgetMissing(state))
 	}
 
-	if n := RecordObjectPaths(state, opts.Want); n > 0 {
-		logger.Printf("recorded the object path of %d images already in place", n)
-	}
-
 	fetches := NeedFetch(state, opts.Want)
 	if opts.SkipSealed {
 		fetches = dropSealed(fetches)

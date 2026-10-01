@@ -33,8 +33,7 @@ type StateEntry struct {
 	Missing   bool   `json:"missing,omitempty"`
 	// ObjectPath is where the image was stored, so a run can tell that an
 	// object wants moving even though its source url is unchanged. Absent on
-	// entries written before it was recorded; NeedFetch judges those by their
-	// source instead.
+	// missing markers, which store nothing.
 	ObjectPath string `json:"objectPath,omitempty"`
 }
 

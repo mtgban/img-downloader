@@ -77,9 +77,8 @@ is unclaimed, and the first run against it claims it.
   are not the bytes served — see *Stored format*.
   A key is refetched when its stored `source` differs from the currently wanted
   URL, or when its `objectPath` does: a source url alone cannot see an object
-  that a format or layout change moved. Entries with no `objectPath` are
-  judged by their source's extension instead. Sealed URLs never change, so
-  sealed images are fetch-once.
+  that a format or layout change moved. Sealed URLs never change, so sealed
+  images are fetch-once.
   `source` keeps the whole Scryfall URL including its `?<epoch>` query, which
   Scryfall bumps whenever it reprocesses an image, so a reprocess is what
   triggers the refetch. The object path is built from the id, not the URL, so
