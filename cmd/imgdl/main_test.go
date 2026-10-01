@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"reflect"
+	"maps"
 	"syscall"
 	"testing"
 	"time"
@@ -21,7 +21,7 @@ func TestParseSetsEmpty(t *testing.T) {
 func TestParseSetsUppercases(t *testing.T) {
 	got := parseSets("neo,vow, MID")
 	want := map[string]bool{"NEO": true, "VOW": true, "MID": true}
-	if !reflect.DeepEqual(got, want) {
+	if !maps.Equal(got, want) {
 		t.Errorf("parseSets = %v, want %v", got, want)
 	}
 }
