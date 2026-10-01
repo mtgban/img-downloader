@@ -246,9 +246,7 @@ func (f *fetcher) run(ctx context.Context, want map[string]Image, keys []string)
 
 	var wg sync.WaitGroup
 	for host, queue := range queues {
-		wg.Add(1)
-		go func(host string, queue []string) {
-			defer wg.Done()
+		wg.Go(func() {
 			for _, key := range queue {
 				// stop taking new work once the run is cancelled or aborted
 				if runCtx.Err() != nil {
@@ -267,7 +265,7 @@ func (f *fetcher) run(ctx context.Context, want map[string]Image, keys []string)
 					return
 				}
 			}
-		}(host, queue)
+		})
 	}
 	wg.Wait()
 
