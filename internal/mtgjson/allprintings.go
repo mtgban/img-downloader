@@ -9,9 +9,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
-)
 
-const userAgent = "mtgban-img-downloader/1.0 (+https://www.mtgban.com)"
+	"github.com/mtgban/img-downloader/internal/web"
+)
 
 // SetImages is the image-relevant slice of one AllPrintings set entry.
 type SetImages struct {
@@ -151,24 +151,9 @@ func toSetImages(s slimSet) SetImages {
 
 // Fetch GETs url, gunzipping the body when the URL ends in ".gz".
 func Fetch(ctx context.Context, httpClient *http.Client, url string) (io.ReadCloser, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	resp, err := web.Get(ctx, httpClient, url)
 	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "*/*")
-
-	client := httpClient
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("mtgjson: fetch %s: status %d", url, resp.StatusCode)
+		return nil, fmt.Errorf("mtgjson: %w", err)
 	}
 
 	if !strings.HasSuffix(url, ".gz") {

@@ -10,13 +10,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/mtgban/img-downloader/internal/web"
 )
 
-const (
-	bulkDataURL = "https://api.scryfall.com/bulk-data"
-	// UserAgent identifies the tool on every scryfall and image-source request.
-	UserAgent = "mtgban-img-downloader/1.0 (+https://www.mtgban.com)"
-)
+const bulkDataURL = "https://api.scryfall.com/bulk-data"
 
 // Client calls the Scryfall API.
 type Client struct {
@@ -34,25 +32,11 @@ type bulkDataEntry struct {
 
 // DefaultCardsURI returns the jsonl_download_uri for the default_cards bulk entry.
 func (c Client) DefaultCardsURI(ctx context.Context) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, bulkDataURL, nil)
+	resp, err := web.Get(ctx, c.HTTP, bulkDataURL)
 	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Accept", "*/*")
-
-	client := c.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
+		return "", fmt.Errorf("scryfall bulk-data: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("scryfall bulk-data: status %d", resp.StatusCode)
-	}
 
 	var listing bulkDataListing
 	if err := json.NewDecoder(resp.Body).Decode(&listing); err != nil {

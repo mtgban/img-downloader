@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mtgban/img-downloader/internal/scryfall"
+	"github.com/mtgban/img-downloader/internal/web"
 	"github.com/mtgban/simplecloud"
 )
 
@@ -369,12 +369,10 @@ func (f *fetcher) download(ctx context.Context, host, srcURL string) ([]byte, er
 			return nil, err
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, srcURL, nil)
+		req, err := web.NewRequest(ctx, srcURL)
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("User-Agent", scryfall.UserAgent)
-		req.Header.Set("Accept", "*/*")
 
 		resp, err := f.client.Do(req)
 		if err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/mtgban/img-downloader/internal/mtgjson"
 	"github.com/mtgban/img-downloader/internal/scryfall"
 	"github.com/mtgban/img-downloader/internal/source"
+	"github.com/mtgban/img-downloader/internal/web"
 )
 
 // AllPrintingsURL is the MTGJSON export the set and card enumeration comes from.
@@ -70,32 +71,17 @@ func (p *Provider) BuildWant(ctx context.Context, setsFilter map[string]bool) (s
 // loadScryfallURLs resolves the default_cards bulk file and streams it into an
 // id -> front image URL map.
 func (p *Provider) loadScryfallURLs(ctx context.Context) (map[string]string, error) {
-	httpClient := p.HTTP
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
-
-	client := scryfall.Client{HTTP: httpClient}
+	client := scryfall.Client{HTTP: p.HTTP}
 	uri, err := client.DefaultCardsURI(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
+	resp, err := web.Get(ctx, p.HTTP, uri)
 	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", scryfall.UserAgent)
-	req.Header.Set("Accept", "*/*")
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scryfall bulk download: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("scryfall bulk download: status %d", resp.StatusCode)
-	}
 
 	urls := map[string]string{}
 	err = scryfall.StreamCards(resp.Body, func(c scryfall.BulkCard) error {
@@ -112,16 +98,12 @@ func (p *Provider) loadScryfallURLs(ctx context.Context) (map[string]string, err
 
 // loadMTGJSONSets fetches and streams AllPrintings.json.gz into a slice of SetImages.
 func (p *Provider) loadMTGJSONSets(ctx context.Context) ([]mtgjson.SetImages, error) {
-	httpClient := p.HTTP
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
 	url := p.AllPrintingsURL
 	if url == "" {
 		url = AllPrintingsURL
 	}
 
-	rc, err := mtgjson.Fetch(ctx, httpClient, url)
+	rc, err := mtgjson.Fetch(ctx, p.HTTP, url)
 	if err != nil {
 		return nil, err
 	}
