@@ -82,9 +82,8 @@ type Want map[string]mirror.Image
 //
 // A provider owns three things the mirror deliberately knows nothing about:
 // the card list, the source image URL for each card, and the object path each
-// image is stored at. It is handed the bucket it is mirroring into, because a
-// datastore-backed provider reads its card data from that same account's
-// storage, and a filter of set codes to restrict the run to.
+// image is stored at. Where its card data comes from is its own configuration;
+// BuildWant is handed only a filter of set codes to restrict the run to.
 type Provider interface {
 	// Game is the game this provider mirrors.
 	Game() Game
