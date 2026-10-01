@@ -233,7 +233,7 @@ func TestRunStopsPromptlyOnCancelAndSavesSnapshot(t *testing.T) {
 	start := time.Now()
 	done := make(chan struct{})
 	go func() {
-		f.run(ctx, want, []string{"key-a", "key-b"})
+		_, _, _ = f.run(ctx, want, []string{"key-a", "key-b"})
 		close(done)
 	}()
 

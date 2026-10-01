@@ -43,7 +43,10 @@ const bulkListing = `{"data":[{"type":"default_cards","jsonl_download_uri":"http
 func TestProviderBuildWantFailsOnBulkDownloadStatus(t *testing.T) {
 	p := sourceServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/bulk-data" {
-			io.WriteString(w, bulkListing)
+			_, err := io.WriteString(w, bulkListing)
+			if err != nil {
+				t.Error(err)
+			}
 			return
 		}
 		w.WriteHeader(http.StatusBadGateway)
@@ -81,8 +84,14 @@ func TestProviderBuildWantReportsCancelOverTruncation(t *testing.T) {
 
 	var head bytes.Buffer
 	zw := gzip.NewWriter(&head)
-	io.WriteString(zw, `{"id":"7673784e-db4b-43a1-8d55-1bb9fc1e284f","set":"tst","image_uris":{"grid":"https://cards.scryfall.io/x.webp"}}`+"\n"+`{"id":"half`)
-	zw.Flush()
+	_, err := io.WriteString(zw, `{"id":"7673784e-db4b-43a1-8d55-1bb9fc1e284f","set":"tst","image_uris":{"grid":"https://cards.scryfall.io/x.webp"}}`+"\n"+`{"id":"half`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = zw.Flush()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	client := &http.Client{Transport: rerouteFunc(func(req *http.Request) (*http.Response, error) {
 		body := io.NopCloser(strings.NewReader(bulkListing))
@@ -93,7 +102,7 @@ func TestProviderBuildWantReportsCancelOverTruncation(t *testing.T) {
 	})}
 	p := &magic.Provider{HTTP: client, Log: log.New(io.Discard, "", 0)}
 
-	_, err := p.BuildWant(ctx, nil)
+	_, err = p.BuildWant(ctx, nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("BuildWant = %v, want context.Canceled", err)
 	}

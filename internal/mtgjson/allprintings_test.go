@@ -113,8 +113,12 @@ func TestFetch_Gzip(t *testing.T) {
 		// no Content-Encoding header: avoid transport auto-decode of the .gz body
 		var buf bytes.Buffer
 		gw := gzip.NewWriter(&buf)
-		gw.Write([]byte(body))
-		gw.Close()
+		if _, err := gw.Write([]byte(body)); err != nil {
+			t.Error(err)
+		}
+		if err := gw.Close(); err != nil {
+			t.Error(err)
+		}
 		w.Write(buf.Bytes())
 	})
 	ts := httptest.NewServer(mux)
