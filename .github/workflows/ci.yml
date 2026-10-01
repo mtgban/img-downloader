@@ -42,11 +42,14 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Revive
+        run: go run github.com/mgechev/revive@v1.13.0 -set_exit_status -config .revive.toml ./...
+
       # Pinned, since a new release finding new things would fail a build
-      # that changed nothing. A go.mod bump may need one here too: 2025.1.1
-      # cannot read Go 1.27's export data.
+      # that changed nothing. A go.mod bump may need one here too: a
+      # staticcheck built before a Go release cannot read its export data.
       - name: Staticcheck
-        run: go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...
+        run: go run honnef.co/go/tools/cmd/staticcheck@2026.2.1 ./...
 
       - name: Build
         run: go build ./...
@@ -58,9 +61,8 @@ jobs:
   # and reports only advisories the code actually reaches, so an unreachable
   # one in a transitive module does not fail the build.
   #
-  # Pinned like staticcheck, but for a different reason: the database is
-  # fetched at run time, so a pinned binary still sees new advisories. What the
-  # pin avoids is a tool release changing what counts as reachable.
+  # Not pinned: the verdict follows the vulnerability database, which is
+  # fetched at run time either way.
   vuln:
     runs-on: ubuntu-latest
     steps:
@@ -73,4 +75,4 @@ jobs:
           go-version-file: go.mod
 
       - name: govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
