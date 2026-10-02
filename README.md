@@ -128,9 +128,10 @@ Two rules do most of the work:
   (its lightbox caps at 440 css px; everything else is a thumbnail). A png card
   scan measured 1,476,439 bytes at 744x1040 and 77,154 at 486x680: 19x smaller.
 
-Quality is 80 and the corpus is stuck with it, since changing it re-digests and
-re-stores every image that is not already webp. It is not higher because of
-what the sources are: a jpg is already lossy and gains almost nothing, and at
+Quality is 80. Changing it, or the encoder, applies only to images fetched
+afterwards: the diff goes by source URL and object path, not by how an object
+was encoded, so stored objects keep their encode until their source changes.
+It is not higher because of what the sources are: a jpg is already lossy and gains almost nothing, and at
 q90 a jpg re-encode comes out larger than the jpg it came from.
 
 A source the mirror cannot decode is a failed fetch, not a stored object.
