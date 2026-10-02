@@ -17,9 +17,10 @@ import (
 // bundle entry names and the website's cache urls all end the same way.
 const ImageExt = "webp"
 
-// webpQuality is the lossy encode quality, and it is a number the corpus is
-// stuck with: fetchOne digests what it stores, so raising or lowering it
-// re-digests and re-stores every image that is not already webp.
+// webpQuality is the lossy encode quality. A change applies only to images
+// fetched afterwards: NeedFetch goes by source url and object path, not by how
+// an object was encoded, so stored objects keep the encode they were fetched
+// with.
 //
 // 80 rather than something higher because of what the sources are. A png card
 // scan lands at roughly an eighth of its size here, while a jpeg is already
