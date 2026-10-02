@@ -1,6 +1,6 @@
-# Style rules the tree already satisfies, so that a regression is caught at
-# review time rather than found in a later sweep. Mirrors mtgban-website's
-# and go-mtgban's config.
+# The mtgban org's rule set, shared by every Go repository so a habit picked
+# up in one reads the same in the others. A repository may add a rule, or
+# drop one with a comment saying why; keep the list otherwise as it is.
 
 ignoreGeneratedHeader = false
 severity = "error"
@@ -43,5 +43,7 @@ warningCode = 1
 [rule.unreachable-code]
 [rule.var-declaration]
 [rule.var-naming]
+# Compare with slices/maps, or a comparison written for the type:
+# https://github.com/mtgban/mtgban-website/blob/master/docs/adr/0002-no-reflect.md
 [rule.imports-blocklist]
   arguments = ["reflect"]
