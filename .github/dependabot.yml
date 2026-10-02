@@ -1,19 +1,40 @@
-# Weekly, one grouped pull request per ecosystem, so updates arrive as a
-# reviewable change that CI gates rather than as a stream.
+# Weekly version updates, one pull request per group. Security updates open
+# as soon as an advisory lands, grouped the same way and without the cooldown.
 version: 2
 updates:
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-    groups:
-      actions:
-        patterns: ["*"]
-
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
+    # A release has a week to be yanked before it is proposed; our own
+    # libraries are tagged when we need them.
+    cooldown:
+      default-days: 7
+      exclude:
+        - github.com/mtgban/*
+    commit-message:
+      prefix: go.mod
     groups:
-      go-modules:
-        patterns: ["*"]
+      mtgban:
+        patterns:
+          - github.com/mtgban/*
+      modules:
+        patterns:
+          - "*"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns:
+          - "*"
