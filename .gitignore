@@ -1,0 +1,11 @@
+# Binaries and test output
+*.exe
+*.test
+*.out
+/imgdl
+
+# Local configuration and editor state
+.env
+.DS_Store
+.idea/
+.vscode/
