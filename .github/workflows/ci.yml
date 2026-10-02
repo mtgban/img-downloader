@@ -1,16 +1,13 @@
-name: CI
+name: 'Run CI'
 
 on:
-  workflow_dispatch: {}
-  # A branch with a pull request open answers for it there, so pushing to one
-  # would otherwise run the whole suite twice over the same commit.
+  pull_request:
   push:
     branches:
       - master
-  pull_request: {}
+  workflow_dispatch:
 
-# One run per branch: a push that supersedes another stops it rather than
-# racing it for the runners.
+# A push that supersedes another stops it rather than racing it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -19,13 +16,13 @@ permissions:
   contents: read
 
 jobs:
-  style:
+  ci:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
 
-      - name: Install golang
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -39,40 +36,28 @@ jobs:
             exit 1
           fi
 
-      - name: Vet
+      - name: go vet ./...
         run: go vet ./...
 
-      - name: Revive
-        run: go run github.com/mgechev/revive@v1.13.0 -set_exit_status -config .revive.toml ./...
+      - name: Lint
+        run: |
+          go run github.com/mgechev/revive@v1.13.0 \
+            -set_exit_status -config .revive.toml ./...
 
-      # Pinned, since a new release finding new things would fail a build
-      # that changed nothing. A go.mod bump may need one here too: a
-      # staticcheck built before a Go release cannot read its export data.
+      # revive reads the syntax tree; staticcheck follows the values through
+      # it. Pinned, since a new release finding new things would fail a build
+      # that changed nothing.
       - name: Staticcheck
         run: go run honnef.co/go/tools/cmd/staticcheck@2026.2.1 ./...
 
-      - name: Build
+      # The standard library ships with the toolchain, which Dependabot's
+      # go.mod updates do not cover. Not pinned: the verdict follows the
+      # vulnerability database, which moves whichever release reads it.
+      - name: Govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      - name: go build ./...
         run: go build ./...
 
-      - name: Test
+      - name: go test -race ./...
         run: go test -race ./...
-
-  # govulncheck matches the module graph against the Go vulnerability database
-  # and reports only advisories the code actually reaches, so an unreachable
-  # one in a transitive module does not fail the build.
-  #
-  # Not pinned: the verdict follows the vulnerability database, which is
-  # fetched at run time either way.
-  vuln:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Install golang
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-
-      - name: govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
