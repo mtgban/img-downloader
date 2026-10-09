@@ -83,7 +83,10 @@ func TestLoadStateTransientErrorFails(t *testing.T) {
 
 func TestLoadStateCorruptFileFails(t *testing.T) {
 	base := filepath.ToSlash(t.TempDir())
-	os.WriteFile(filepath.Join(base, "mirror-state.json"), []byte("{not json"), 0644)
+	err := os.WriteFile(filepath.Join(base, "mirror-state.json"), []byte("{not json"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := mirror.LoadState(context.Background(), &simplecloud.FileBucket{}, base); err == nil {
 		t.Fatal("expected error on corrupt state")
 	}
@@ -91,7 +94,10 @@ func TestLoadStateCorruptFileFails(t *testing.T) {
 
 func TestLoadManifestCorruptFileFails(t *testing.T) {
 	base := filepath.ToSlash(t.TempDir())
-	os.WriteFile(filepath.Join(base, "images-manifest.json"), []byte("{not json"), 0644)
+	err := os.WriteFile(filepath.Join(base, "images-manifest.json"), []byte("{not json"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := mirror.LoadManifest(context.Background(), &simplecloud.FileBucket{}, base); err == nil {
 		t.Fatal("expected error on corrupt manifest")
 	}
