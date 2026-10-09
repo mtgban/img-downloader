@@ -7,7 +7,7 @@ toolchain go1.26.9
 require (
 	github.com/Backblaze/blazer v0.8.0
 	github.com/chai2010/webp v1.4.0
-	github.com/mtgban/go-mtgban v0.9.3
+	github.com/mtgban/go-mtgban v0.9.6
 	github.com/mtgban/simplecloud v0.1.1
 	golang.org/x/image v0.46.0
 )

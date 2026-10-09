@@ -112,8 +112,8 @@ github.com/klauspost/compress v1.4.1/go.mod h1:RyIbtBH6LamlWaDj8nUwkbUhJ87Yi3uG0
 github.com/klauspost/cpuid v1.2.0/go.mod h1:Pj4uuM528wm8OyEC2QMXAi2YiTZ96dNQPGgoMS4s3ek=
 github.com/mroth/weightedrand/v2 v2.1.0 h1:o1ascnB1CIVzsqlfArQQjeMy1U0NcIbBO5rfd5E/OeU=
 github.com/mroth/weightedrand/v2 v2.1.0/go.mod h1:f2faGsfOGOwc1p94wzHKKZyTpcJUW7OJ/9U4yfiNAOU=
-github.com/mtgban/go-mtgban v0.9.3 h1:1uCL1tX4wIFX6kBF8C/X52RxnT3wPCIza6yI2nwdMvE=
-github.com/mtgban/go-mtgban v0.9.3/go.mod h1:R6r8L/o0O6NDV6qLvxTdjdqqD1xhzCWLkJP2FflvEvk=
+github.com/mtgban/go-mtgban v0.9.6 h1:wyoZ0vDqVKQ52Q4o5sGpfkbMPDX4uvA7AXc1xBMVNGE=
+github.com/mtgban/go-mtgban v0.9.6/go.mod h1:oPdvzdFoYPVI/EyxcbijPhO+yjspWqJnax5tR8xsWp8=
 github.com/mtgban/simplecloud v0.1.1 h1:lSQUKMsV2YyGTIFJ+graatpLcbdkSpOXtL30EBOqAk8=
 github.com/mtgban/simplecloud v0.1.1/go.mod h1:9mgc8qt+pU/+Ls/LQ1FS44RfHt0umR4+hDo7W/trlEA=
 github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 h1:GFCKgmp0tecUJ0sJuv4pzYCqS9+RGSn52M3FUwPs+uo=
