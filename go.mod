@@ -7,7 +7,7 @@ toolchain go1.26.10
 require (
 	github.com/Backblaze/blazer v0.8.0
 	github.com/chai2010/webp v1.4.0
-	github.com/mtgban/go-mtgban v0.9.3
+	github.com/mtgban/go-mtgban v0.11.0
 	github.com/mtgban/simplecloud v0.1.1
 	golang.org/x/image v0.46.0
 )
@@ -56,7 +56,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.22 // indirect
 	github.com/googleapis/gax-go/v2 v2.26.2 // indirect
-	github.com/mroth/weightedrand/v2 v2.1.0 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.8.2 // indirect
 	github.com/ulikunitz/xz v0.5.17 // indirect
@@ -73,9 +72,9 @@ require (
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
-	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	google.golang.org/api v0.298.0 // indirect
 	google.golang.org/genproto v0.0.0-20260928230214-8a89bd6388cc // indirect
